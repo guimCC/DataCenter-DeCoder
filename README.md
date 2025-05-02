@@ -5,32 +5,32 @@ The project is in collaboration with Siemens Energy, who provided us with detail
 
 * Modules.csv:
 
-ID	Name	Is_Input	Is_Output	Unit	Amount
-1	Transformer_100	1	0	Grid_Connection	1
-1	Transformer_100	1	0	Space_X	40
-1	Transformer_100	1	0	Space_Y	45
-1	Transformer_100	1	0	Price	1000
-1	Transformer_100	0	1	Usable_Power	100
-2	Transformer_1000	1	0	Grid_Connection	1
-2	Transformer_1000	1	0	Space_X	100
-2	Transformer_1000	1	0	Space_Y	100
-2	Transformer_1000	1	0	Price	50000
-2	Transformer_1000	0	1	Usable_Power	1000
-3	Transformer_5000	1	0	Grid_Connection	1
-3	Transformer_5000	1	0	Space_X	200
-3	Transformer_5000	1	0	Space_Y	200
-3	Transformer_5000	1	0	Price	250000
-3	Transformer_5000	0	1	Usable_Power	5000
-4	Water_Supply_100	1	0	Water_Connection	1
-4	Water_Supply_100	1	0	Space_X	50
-4	Water_Supply_100	1	0	Space_Y	50
-4	Water_Supply_100	1	0	Price	200
-4	Water_Supply_100	0	1	Fresh_Water	100
-5	Water_Supply_500	1	0	Water_Connection	1
-5	Water_Supply_500	1	0	Space_X	150
-5	Water_Supply_500	1	0	Space_Y	100
-5	Water_Supply_500	1	0	Price	400
-5	Water_Supply_500	0	1	Fresh_Water	500
+ID;Name;Is_Input;Is_Output;Unit;Amount
+1;Transformer_100;1;0;Grid_Connection;1
+1;Transformer_100;1;0;Space_X;40
+1;Transformer_100;1;0;Space_Y;45
+1;Transformer_100;1;0;Price;1000
+1;Transformer_100;0;1;Usable_Power;100
+2;Transformer_1000;1;0;Grid_Connection;1
+2;Transformer_1000;1;0;Space_X;100
+2;Transformer_1000;1;0;Space_Y;100
+2;Transformer_1000;1;0;Price;50000
+2;Transformer_1000;0;1;Usable_Power;1000
+3;Transformer_5000;1;0;Grid_Connection;1
+3;Transformer_5000;1;0;Space_X;200
+3;Transformer_5000;1;0;Space_Y;200
+3;Transformer_5000;1;0;Price;250000
+3;Transformer_5000;0;1;Usable_Power;5000
+4;Water_Supply_100;1;0;Water_Connection;1
+4;Water_Supply_100;1;0;Space_X;50
+4;Water_Supply_100;1;0;Space_Y;50
+4;Water_Supply_100;1;0;Price;200
+4;Water_Supply_100;0;1;Fresh_Water;100
+5;Water_Supply_500;1;0;Water_Connection;1
+5;Water_Supply_500;1;0;Space_X;150
+5;Water_Supply_500;1;0;Space_Y;100
+5;Water_Supply_500;1;0;Price;400
+5;Water_Supply_500;0;1;Fresh_Water;500
 
 * Data_Center_Spec.csv
 
