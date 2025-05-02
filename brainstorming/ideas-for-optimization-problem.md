@@ -11,4 +11,7 @@
 * We want to give some different results to the user, so he can choose the one he likes more (maybe one prioritizes more something rather than the other)
 
 
-## Optimize for server location (?)
+## Optimize for (real) placement of the things in the area (?)
+* Which coordinates do each component go?
+* Do some componentes need to be close to some others? (e.g. water close to networks)
+  * ==> do we have to minimize some distance?
