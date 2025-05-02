@@ -1,7 +1,9 @@
 # DataCenter-DeCoder
 The project is in collaboration with Siemens Energy, who provided us with detailed information about various modules—such as transformers, water supply units, and processors. Each module has several inputs and outputs, which are associated with specific units.
 
-Here’s an example of the module data:
+**Here’s an example of the module data:**
+
+* Modules.csv:
 
 ID	Name	Is_Input	Is_Output	Unit	Amount
 1	Transformer_100	1	0	Grid_Connection	1
@@ -29,6 +31,32 @@ ID	Name	Is_Input	Is_Output	Unit	Amount
 5	Water_Supply_500	1	0	Space_Y	100
 5	Water_Supply_500	1	0	Price	400
 5	Water_Supply_500	0	1	Fresh_Water	500
+
+* Data_Center_Spec.csv
+
+ID;Name;Below_Amount;Above_Amount;Minimize;Maximize;Unconstrained;Unit;Amount
+1;Server_Square;0;0;0;1;0;External_Network;-1
+1;Server_Square;1;0;0;0;0;Grid_Connection;3
+1;Server_Square;1;0;0;0;0;Water_Connection;1
+1;Server_Square;1;0;0;0;0;Space_X;1000
+1;Server_Square;1;0;0;0;0;Space_Y;500
+1;Server_Square;0;1;0;0;0;Data_Storage;1000
+1;Server_Square;0;1;0;0;0;Processing;1000
+1;Server_Square;1;0;0;0;0;Price;1000000
+2;Dense_Storage;0;1;0;0;1;Grid_Connection;-1
+2;Dense_Storage;0;0;0;0;1;Water_Connection;-1
+2;Dense_Storage;0;0;1;0;0;Space_X;-1
+2;Dense_Storage;0;0;1;0;0;Space_Y;-1
+2;Dense_Storage;0;0;0;1;0;Data_Storage;-1
+2;Dense_Storage;1;0;0;0;0;Price;5000000
+3;Supercomputer;0;1;0;0;1;Grid_Connection;-1
+3;Supercomputer;0;0;0;0;1;Water_Connection;-1
+3;Supercomputer;0;0;1;0;0;Usable_Power;-1
+3;Supercomputer;0;0;0;1;0;Processing;-1
+3;Supercomputer;1;0;0;0;0;Space_X;2000
+3;Supercomputer;1;0;0;0;0;Space_Y;1000
+
+
 
 DataCenter Specifications
 We are also provided with a set of objectives and constraints for designing a data center. These cover units such as:
