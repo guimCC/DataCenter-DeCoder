@@ -83,7 +83,7 @@ async def solve_dummy():
         },
         {
             "id": 2,
-            "name": "Cooling_Unit",
+            "name": "Water_Supply_100",
             "io_fields": [
                 {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 30},
                 {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 30},
@@ -93,7 +93,7 @@ async def solve_dummy():
         },
         {
             "id": 3,
-            "name": "Processor_X",
+            "name": "Server_Rack_500",
             "io_fields": [
                 {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 50},
                 {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 25},
