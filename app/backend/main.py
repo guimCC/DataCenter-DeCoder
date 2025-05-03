@@ -1,7 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
-from pydantic import BaseModel
+# Remove Pydantic import if no longer needed directly here
+# from pydantic import BaseModel # Keep if needed for other things, remove if not
+
+# Import models from the new file
+from models import Module, IOField, PositionedModule, SpecRule, DataCenter
 
 # MongoDB
 from mongo_utils import insert_modules, get_all_modules, get_database
@@ -23,40 +27,6 @@ app.add_middleware(
 @app.get("/")
 def home():
     return {"message": "API is running!"}
-
-# Pydantic models
-class IOField(BaseModel):
-    is_input: bool
-    is_output: bool
-    unit: str
-    amount: float
-
-class Module(BaseModel):
-    id: int
-    name: str
-    io_fields: List[IOField]
-
-class PositionedModule(Module):
-    gridColumn: int
-    gridRow: int
-    width: int
-    height: int
-
-class SpecRule(BaseModel):
-    Below_Amount: int
-    Above_Amount: int
-    Minimize: int
-    Maximize: int
-    Unconstrained: int
-    Unit: str
-    Amount: float
-
-class DataCenter(BaseModel):
-    id: int
-    name: str
-    specs: List[SpecRule]
-    details: Dict[str, float]
-    modules: List[PositionedModule]
 
 
 # GET: return all modules
@@ -124,16 +94,14 @@ async def solve_dummy():
 
 # POST: solve layout
 @app.post("/solve-dummy")
-async def solve(specs: json, weights) -> json:
+async def solve(specs, weights):
     modules = get_modules()
+
     # solve for the list of modules
     module_list = solve_module_list(modules, specs, weights)
     
     # solve for the location given the list of modules
     return solve_module_placement(modules, specs, weights, module_list)
-
-
-
 
 
 
