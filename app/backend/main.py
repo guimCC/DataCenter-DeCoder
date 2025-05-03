@@ -1,6 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
+from typing import List, Dict
 from pydantic import BaseModel
 
 # MongoDB
@@ -23,20 +23,6 @@ app.add_middleware(
 def home():
     return {"message": "API is running!"}
 
-MODULES = [
-    {
-        "id": 1,
-        "name": "Transformer_100",
-        "io_fields": [
-            {"is_input": True, "is_output": False, "unit": "Grid_Connection", "amount": 1},
-            {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 40},
-            {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 45},
-            {"is_input": True, "is_output": False, "unit": "Price", "amount": 1000},
-            {"is_input": False, "is_output": True, "unit": "Usable_Power", "amount": 100}
-        ]
-    }
-]
-
 # Pydantic models
 class IOField(BaseModel):
     is_input: bool
@@ -48,6 +34,28 @@ class Module(BaseModel):
     id: int
     name: str
     io_fields: List[IOField]
+
+class PositionedModule(Module):
+    gridColumn: int
+    gridRow: int
+
+class SpecRule(BaseModel):
+    ID: int
+    Name: str
+    Below_Amount: int
+    Above_Amount: int
+    Minimize: int
+    Maximize: int
+    Unconstrained: int
+    Unit: str
+    Amount: float
+
+class DataCenter(BaseModel):
+    id: int
+    name: str
+    specs: List[SpecRule]
+    details: Dict[str, float]
+    modules: List[Dict[str, object]]  # id, name, x, y, width, height
 
 
 # GET: return all modules
@@ -125,3 +133,37 @@ def update_module(module_id: int, updated: Module):
     db = get_database()
     db.modules.update_one({"id": module_id}, {"$set": updated.dict()})
     return {"message": "Updated"}
+
+######################### DATACENTER #########################
+@app.get("/datacenters")
+def get_all_datacenters():
+    db = get_database()
+    return list(db.datacenters.find({}, {"_id": 0}))
+
+@app.get("/datacenters/{id}")
+def get_datacenter(id: int):
+    db = get_database()
+    result = db.datacenters.find_one({"id": id}, {"_id": 0})
+    if not result:
+        raise HTTPException(status_code=404, detail="Not found")
+    return result
+
+@app.post("/datacenters")
+def create_datacenter(dc: DataCenter):
+    db = get_database()
+    if db.datacenters.find_one({"id": dc.id}):
+        raise HTTPException(status_code=400, detail="ID already exists")
+    db.datacenters.insert_one(dc.model_dump())
+    return {"message": "Datacenter saved"}
+
+@app.put("/datacenters/{id}")
+def update_datacenter(id: int, dc: DataCenter):
+    db = get_database()
+    db.datacenters.update_one({"id": id}, {"$set": dc.model_dump()})
+    return {"message": "Datacenter updated"}
+
+@app.delete("/datacenters/{id}")
+def delete_datacenter(id: int):
+    db = get_database()
+    db.datacenters.delete_one({"id": id})
+    return {"message": "Datacenter deleted"}
