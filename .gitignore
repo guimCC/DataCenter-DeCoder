@@ -27,3 +27,5 @@ venv-*
 backend/venv*
 .gitignore
 backend/__pycache__/*
+
+hackupc/
