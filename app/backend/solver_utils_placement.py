@@ -2,6 +2,8 @@ from models import Module
 import time
 import numpy as np # Added for placement grid
 
+from app.backend.solver_utils_list import standardize_unit_name
+
 # --- Constants ---
 INPUT_RESOURCES = ['price', 'grid_connection', 'water_connection']
 OUTPUT_RESOURCES = ['external_network', 'data_storage', 'processing']
