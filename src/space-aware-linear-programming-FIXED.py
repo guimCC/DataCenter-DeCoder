@@ -6,7 +6,7 @@ This script reads module specifications (including dimensions derived from /Y in
 and datacenter requirements (including total area dimensions from Space_X/Y constraints)
 from CSV files. It formulates a Constraint Programming problem for each spec, aiming
 to place modules without overlap within the area while optimizing resource objectives
-and satisfying resource constraints.
+and satisfying resource constraints, respecting resource type rules.
 """
 import pandas as pd
 from ortools.sat.python import cp_model
@@ -17,15 +17,15 @@ import math # Import math for ceiling division if needed, or use //
 # --- Configuration ---
 MODULES_CSV_PATH = "data/Modules.csv"
 SPEC_CSV_PATH = "data/Data_Center_Spec.csv"
-# Max potential instances per module type (adjust based on expected scale/area)
-# A higher number allows more flexibility but increases model size.
-# DEFAULT_MAX_INSTANCES_PER_TYPE = 20 # Removed
 # Solver time limit in seconds
 SOLVER_TIME_LIMIT_SECONDS = 120.0
 
-INPUT_RESOURCES = ['Price', 'Grid_Connection', 'Water_Connection']
-OUTPUT_RESOURCES = ['External_Network', 'Data_Storage', 'Processing']
-INTERNAL_RESOURCES = ['Usable_Power', 'Fresh_Water', 'Distilled_Water', 'Chilled_Water', 'Internal_Network']
+# Define Resource Categories
+INPUT_RESOURCES = ['price', 'grid_connection', 'water_connection']
+OUTPUT_RESOURCES = ['external_network', 'data_storage', 'processing']
+INTERNAL_RESOURCES = ['usable_power', 'fresh_water', 'distilled_water', 'chilled_water', 'internal_network']
+# Add space dimensions here so they are ignored in resource constraint logic
+DIMENSION_RESOURCES = ['space_x', 'space_y']
 
 
 # --- Helper Function to Load and Process Data ---
@@ -153,7 +153,7 @@ def load_data(modules_path, spec_path):
 
 # --- CP-SAT Optimization Function ---
 def solve_datacenter_placement(module_data, target_spec_df, module_ids,
-                               target_spec_name, total_width, total_height): # Removed max_instances_per_type
+                               target_spec_name, total_width, total_height):
     """
     Creates and solves the CP-SAT problem for module placement and resource optimization.
 
@@ -164,7 +164,6 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
         target_spec_name (str): Name of the specification being solved.
         total_width (int): The total available width of the datacenter area.
         total_height (int): The total available height of the datacenter area.
-        # Removed max_instances_per_type parameter doc
 
     Returns:
         dict: Results including status, objective value, placed modules with coordinates,
@@ -172,17 +171,13 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
     """
     print(f"\n##### Solving Placement for Specification: {target_spec_name} #####")
     print(f"Area Dimensions: Width={total_width}, Height={total_height}")
-    # print(f"Max Instances per Module Type: {max_instances_per_type}") # Removed print
     print("-" * 30)
 
     model = cp_model.CpModel()
     start_time = time.time()
 
     # --- Data Structures for CP-SAT variables ---
-    # List to hold tuples: (instance_id, mod_id, width, height)
     all_potential_instances_info = []
-    # Dict to hold CP-SAT variables for each instance:
-    # {instance_id: {'x':.., 'y':.., 'ix':.., 'iy':.., 'present':.., 'mod_id':..}}
     instance_vars = {}
     instance_counter = 0
 
@@ -193,34 +188,25 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
         width = module_data[mod_id]['width']
         height = module_data[mod_id]['height']
 
-        # Only create variables for modules that *can* be placed
         if width <= 0 or height <= 0 or width > total_width or height > total_height:
-            # print(f"  - Skipping Module ID {mod_id} due to invalid/too large dimensions.") # Verbose
-            module_max_instances[mod_id] = 0 # Store 0 max instances
+            module_max_instances[mod_id] = 0
             continue
 
-        # Calculate a theoretical maximum number of instances based on area
-        # This is a loose upper bound, but prevents infinite variables.
         max_possible_w = total_width // width
         max_possible_h = total_height // height
         max_possible = max_possible_w * max_possible_h
-        module_max_instances[mod_id] = max_possible # Store calculated max
-        print(f"  - Module ID {mod_id}: Max possible instances based on area = {max_possible}") # Optional verbose print
+        module_max_instances[mod_id] = max_possible
+        # print(f"  - Module ID {mod_id}: Max possible instances based on area = {max_possible}") # Optional verbose print
 
-        # Use the calculated max_possible for the loop range
         for i in range(max_possible):
             instance_id = instance_counter
             all_potential_instances_info.append((instance_id, mod_id, width, height))
             prefix = f"inst_{instance_id}_mod_{mod_id}"
 
-            # Core position and presence variables
             x_var = model.NewIntVar(0, total_width - width, f'{prefix}_x')
             y_var = model.NewIntVar(0, total_height - height, f'{prefix}_y')
             present_var = model.NewBoolVar(f'{prefix}_present')
 
-            # Optional Interval variables (active only if present_var is true)
-            # IntervalVar(start, size, end, is_present, name)
-            # The 'end' argument is start + size
             interval_x = model.NewOptionalIntervalVar(x_var, width, x_var + width, present_var, f'{prefix}_ix')
             interval_y = model.NewOptionalIntervalVar(y_var, height, y_var + height, present_var, f'{prefix}_iy')
 
@@ -234,7 +220,7 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
 
 
     # --- Add 2D Non-Overlap Constraint ---
-    if instance_vars: # Only add if there are placeable modules
+    if instance_vars:
         print("Adding Non-Overlap Constraint...")
         x_intervals = [v['ix'] for v in instance_vars.values()]
         y_intervals = [v['iy'] for v in instance_vars.values()]
@@ -248,97 +234,188 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
     print("Linking presence variables to module counts...")
     module_count_vars = {}
     for mod_id in module_ids:
-         # Sum of present_vars for instances of this module type
          instances_of_type = [inst_id for inst_id, m_id, _, _ in all_potential_instances_info if m_id == mod_id]
-         # Use the calculated max instances for this type as the upper bound
-         max_inst = module_max_instances.get(mod_id, 0) # Get calculated max, default 0
+         max_inst = module_max_instances.get(mod_id, 0)
          count_var = model.NewIntVar(0, max_inst, f"count_mod_{mod_id}")
-         if instances_of_type: # Only add if variables were created for this type
+         if instances_of_type:
             model.Add(count_var == sum(instance_vars[inst_id]['present'] for inst_id in instances_of_type))
-         else: # If no instances possible (e.g., too large), fix count to 0
+         else:
             model.Add(count_var == 0)
          module_count_vars[mod_id] = count_var
     print("-" * 30)
 
 
-    # --- Define Objective Function (using module_count_vars) ---
-    print("Building Objective:")
-    objective_expr = 0 # CP-SAT uses linear expressions directly
+    # --- Define Objective Function (respecting resource types) ---
+    print("Building Objective (respecting resource types):")
+    objective_expr = 0
     objective_terms_added = 0
+    maximized_units = [] # List to store names of maximized units
+    minimized_units = [] # Optional: List to store names of minimized units
 
     for _, row in target_spec_df.iterrows():
         unit = row['Unit']
-        if unit is None: continue
+        if unit is None or unit in DIMENSION_RESOURCES: continue # Skip dimensions
 
         weight = 0
-        if row['Maximize'] == 1: weight = 1
-        elif row['Minimize'] == 1: weight = -1
+        is_minimize = row['Minimize'] == 1
+        is_maximize = row['Maximize'] == 1
+
+        # Validate objective based on resource type
+        if unit in INPUT_RESOURCES:
+            if is_maximize:
+                print(f"  - Warning: Cannot Maximize input resource '{unit}'. Ignoring objective term.")
+                continue
+            if is_minimize:
+                weight = -1
+        elif unit in OUTPUT_RESOURCES:
+            if is_minimize:
+                print(f"  - Warning: Cannot Minimize output resource '{unit}'. Ignoring objective term.")
+                continue
+            if is_maximize:
+                weight = 1
+        elif unit in INTERNAL_RESOURCES:
+            if is_minimize or is_maximize:
+                print(f"  - Warning: Cannot Minimize/Maximize internal resource '{unit}'. Ignoring objective term.")
+                continue
+        else: # Unknown resource type
+            if is_minimize: weight = -1
+            if is_maximize: weight = 1
+            if weight != 0:
+                 print(f"  - Warning: Applying objective to unknown resource type '{unit}'.")
+
 
         if weight != 0:
-            # Calculate net contribution for this unit across all module *types*
             unit_net_contrib = sum(
-                int(module_data[mod_id]['outputs'].get(unit, 0) - module_data[mod_id]['inputs'].get(unit, 0)) # Cast difference to int
+                int(module_data[mod_id]['outputs'].get(unit, 0) - module_data[mod_id]['inputs'].get(unit, 0))
                 * module_count_vars[mod_id]
-                for mod_id in module_ids if mod_id in module_count_vars # Ensure var exists
+                for mod_id in module_ids if mod_id in module_count_vars
             )
-            # Check if the linear expression has terms before adding
-            # (This check is less critical in CP-SAT compared to PuLP's LpAffineExpression)
+
+            # Check if the expression is non-trivial before adding
+            is_trivial = False
             if isinstance(unit_net_contrib, int) and unit_net_contrib == 0:
-                 pass # Skip if expression is trivially zero
-            elif hasattr(unit_net_contrib, 'Proto') and not unit_net_contrib.Proto().vars:
-                 pass # Skip if expression has no variables (more robust check)
-            else:
+                is_trivial = True
+            elif hasattr(unit_net_contrib, 'Proto') and not unit_net_contrib.Proto().vars and unit_net_contrib.Proto().constant == 0:
+                 is_trivial = True # Check constant term as well for CP-SAT expressions
+
+            if not is_trivial:
                  print(f"  - Adding objective term for unit '{unit}' with weight {weight}")
                  objective_expr += weight * unit_net_contrib
                  objective_terms_added += 1
+                 if weight > 0: # Maximizing
+                     maximized_units.append(unit)
+                 elif weight < 0: # Minimizing
+                     minimized_units.append(unit)
+            # else: # Optional: print if term was skipped due to being trivial
+            #      print(f"  - Skipping trivial objective term for unit '{unit}'.")
+
+    # Print the final objective expression and maximized units
+    print(f"\nObjective Function Expression: {objective_expr}")
+    if maximized_units:
+        print(f"Units being Maximized: {', '.join(maximized_units)}")
+    if minimized_units: # Optional: also print minimized units
+        print(f"Units being Minimized: {', '.join(minimized_units)}")
 
 
     if objective_terms_added == 0:
-        print("  - Warning: No terms added to the objective function!")
-        # CP-SAT doesn't strictly need an objective, but we add a dummy one if maximizing/minimizing
+        print("  - Warning: No valid terms added to the objective function!")
         model.Maximize(0) # Define a dummy objective
     else:
-        model.Maximize(objective_expr) # Maximize the combined expression
+        model.Maximize(objective_expr)
 
     print("-" * 30)
 
 
-    # --- Define Resource Constraints (using module_count_vars) ---
-    print("Adding Resource Constraints:")
+    # --- Define Resource Constraints (respecting resource types) ---
+    print("Adding Resource Constraints (respecting resource types):")
     constraints_added = 0
     for _, row in target_spec_df.iterrows():
         unit = row['Unit']
         limit = row['Amount']
         is_below = row['Below_Amount'] == 1
         is_above = row['Above_Amount'] == 1
+        is_unconstrained = row['Unconstrained'] == 1
 
-        # Skip units defining the area dimensions, they are handled by placement boundaries
-        if unit in ['space_x', 'space_y'] and is_below:
+        # Skip dimensions (handled by placement) and invalid rows
+        if unit is None or unit in DIMENSION_RESOURCES:
              continue
+        if is_unconstrained:
+            print(f"  - Info: Resource '{unit}' is marked as unconstrained in the spec.")
+            continue
+        if pd.isna(limit) and (is_below or is_above):
+            print(f"  - Warning: Skipping constraint for '{unit}' due to missing limit amount.")
+            continue
 
-        if unit is None: continue
+        # Calculate total input and output expressions for the unit
+        input_expr = sum(
+            int(module_data[mod_id]['inputs'].get(unit, 0)) * module_count_vars[mod_id]
+            for mod_id in module_ids if mod_id in module_count_vars
+        )
+        output_expr = sum(
+            int(module_data[mod_id]['outputs'].get(unit, 0)) * module_count_vars[mod_id]
+            for mod_id in module_ids if mod_id in module_count_vars
+        )
 
-        if is_below and pd.notna(limit):
-            input_expr = sum(
-                int(module_data[mod_id]['inputs'].get(unit, 0)) * module_count_vars[mod_id] # Cast input amount to int
+        # Apply constraints based on resource type
+        if unit in INPUT_RESOURCES:
+            if is_above:
+                print(f"  - Warning: Cannot apply 'Above_Amount' constraint to input resource '{unit}'. Ignoring.")
+            elif is_below:
+                model.Add(input_expr <= int(limit))
+                print(f"  - INPUT Constraint: {unit} <= {int(limit)}")
+                constraints_added += 1
+            # else: no constraint specified or unconstrained
+
+        elif unit in OUTPUT_RESOURCES:
+            if is_below:
+                print(f"  - Warning: Cannot apply 'Below_Amount' constraint to output resource '{unit}'. Ignoring.")
+            elif is_above:
+                 model.Add(output_expr >= int(limit))
+                 print(f"  - OUTPUT Constraint: {unit} >= {int(limit)}")
+                 constraints_added += 1
+            # else: no constraint specified or unconstrained
+
+        elif unit in INTERNAL_RESOURCES:
+            if is_below or is_above:
+                print(f"  - Warning: Cannot apply 'Below/Above_Amount' constraint to internal resource '{unit}'. Internal resources must always be >= 0 net. Ignoring spec constraint.")
+            # Implicit constraint added later for all internal resources
+
+        else: # Unknown resource type - apply constraints as specified but warn
+            print(f"  - Warning: Applying spec constraint to unknown resource type '{unit}'.")
+            if is_below:
+                model.Add(input_expr <= int(limit))
+                print(f"  - UNKNOWN TYPE Input Constraint: {unit} <= {int(limit)}")
+                constraints_added += 1
+            elif is_above:
+                 model.Add(output_expr >= int(limit))
+                 print(f"  - UNKNOWN TYPE Output Constraint: {unit} >= {int(limit)}")
+                 constraints_added += 1
+
+    # --- Add Implicit Constraints for Internal Resources ---
+    print("\nAdding Implicit Constraints for Internal Resources (Net >= 0):")
+    internal_constraints_added = 0
+    all_defined_units = set()
+    for mod_id in module_ids:
+        all_defined_units.update(module_data[mod_id]['inputs'].keys())
+        all_defined_units.update(module_data[mod_id]['outputs'].keys())
+
+    for unit in INTERNAL_RESOURCES:
+        # Only add constraint if the resource is actually used by any module
+        if unit in all_defined_units:
+            net_expr = sum(
+                int(module_data[mod_id]['outputs'].get(unit, 0) - module_data[mod_id]['inputs'].get(unit, 0))
+                * module_count_vars[mod_id]
                 for mod_id in module_ids if mod_id in module_count_vars
             )
-            model.Add(input_expr <= int(limit)) # Ensure limit is integer
-            print(f"  - INPUT {unit} <= {int(limit)}")
-            constraints_added += 1
-        elif is_above and pd.notna(limit):
-             output_expr = sum(
-                int(module_data[mod_id]['outputs'].get(unit, 0)) * module_count_vars[mod_id] # Cast output amount to int
-                for mod_id in module_ids if mod_id in module_count_vars
-             )
-             model.Add(output_expr >= int(limit)) # Ensure limit is integer
-             print(f"  - OUTPUT {unit} >= {int(limit)}")
-             constraints_added += 1
-        elif (is_below or is_above) and pd.isna(limit):
-             print(f"  - Warning: Skipping constraint for {unit} due to missing limit.")
+            model.Add(net_expr >= 0)
+            print(f"  - INTERNAL Constraint: Net {unit} >= 0")
+            internal_constraints_added += 1
+        # else: # Optional: print if internal resource is defined but not used
+        #     print(f"  - Info: Internal resource '{unit}' not used by any module, skipping Net >= 0 constraint.")
 
-    if constraints_added == 0:
-         print("  - Warning: No resource constraints were added (besides placement)!")
+
+    if constraints_added == 0 and internal_constraints_added == 0:
+         print("\n  - Warning: No resource constraints were added (besides placement and implicit internal)! Check spec file.")
     print("-" * 30)
 
 
@@ -346,7 +423,7 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
     print(f"Solving the CP-SAT problem for {target_spec_name} (Time Limit: {SOLVER_TIME_LIMIT_SECONDS}s)...")
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = SOLVER_TIME_LIMIT_SECONDS
-    solver.parameters.num_search_workers = 0
+    # solver.parameters.num_search_workers = 0 # Use default or specify based on cores
     # Optional: Increase logging level for more details
     # solver.parameters.log_search_progress = True
     status = solver.Solve(model)
@@ -359,8 +436,8 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
         "spec_name": target_spec_name,
         "status": solver.StatusName(status),
         "objective_value": None,
-        "placed_modules": [], # Changed from selected_modules
-        "selected_modules_counts": {}, # Added to store counts
+        "placed_modules": [],
+        "selected_modules_counts": {},
         "resource_summary": {},
         "constraint_verification": [],
         "solve_time_seconds": solve_time
@@ -405,13 +482,13 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
                         total_outputs[unit] = total_outputs.get(unit, 0) + amount * count
                         all_units_in_solution.add(unit)
 
-        # Store the calculated counts in the results
         results["selected_modules_counts"] = current_module_counts
 
         # --- Calculate Resource Totals ---
         resource_summary_dict = {}
         spec_units = set(target_spec_df['Unit'].dropna())
-        relevant_units = sorted(list(all_units_in_solution | spec_units))
+        # Include internal resources even if not in spec for summary
+        relevant_units = sorted(list(all_units_in_solution | spec_units | set(INTERNAL_RESOURCES)))
 
         for unit in relevant_units:
             inp = total_inputs.get(unit, 0)
@@ -422,36 +499,70 @@ def solve_datacenter_placement(module_data, target_spec_df, module_ids,
 
         # --- Verify Constraints ---
         constraint_verification_list = []
+        # Verify Spec Constraints
         for _, row in target_spec_df.iterrows():
             unit = row['Unit']
             limit = row['Amount']
             is_below = row['Below_Amount'] == 1
             is_above = row['Above_Amount'] == 1
+            is_unconstrained = row['Unconstrained'] == 1
 
-            # Skip area constraints verification (implicitly handled)
-            if unit in ['space_x', 'space_y'] and is_below: continue
-            if unit is None: continue
+            if unit is None or unit in DIMENSION_RESOURCES or is_unconstrained: continue
+            if pd.isna(limit) and (is_below or is_above): continue # Skip invalid
 
-            if is_below and pd.notna(limit):
-                actual_input = total_inputs.get(unit, 0)
-                status_ok = actual_input <= limit + 1e-6 # Tolerance
+            actual_input = total_inputs.get(unit, 0)
+            actual_output = total_outputs.get(unit, 0)
+            status_ok = True
+            violation_type = ""
+
+            if unit in INPUT_RESOURCES:
+                if is_above: continue # Ignore invalid spec constraint
+                if is_below:
+                    status_ok = actual_input <= limit + 1e-6 # Tolerance
+                    violation_type = "Below Input"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                    constraint_verification_list.append(verification_str)
+
+            elif unit in OUTPUT_RESOURCES:
+                if is_below: continue # Ignore invalid spec constraint
+                if is_above:
+                    status_ok = actual_output >= limit - 1e-6 # Tolerance
+                    violation_type = "Above Output"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                    constraint_verification_list.append(verification_str)
+
+            elif unit in INTERNAL_RESOURCES:
+                 # Spec constraints are ignored, only implicit >= 0 matters (verified next)
+                 pass
+
+            else: # Unknown resource type - verify as specified
+                 if is_below:
+                    status_ok = actual_input <= limit + 1e-6
+                    violation_type = "Below Input (UNK)"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                    constraint_verification_list.append(verification_str)
+                 elif is_above:
+                    status_ok = actual_output >= limit - 1e-6
+                    violation_type = "Above Output (UNK)"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                    constraint_verification_list.append(verification_str)
+
+        # Verify Implicit Internal Resource Constraints
+        for unit in INTERNAL_RESOURCES:
+             if unit in resource_summary_dict: # Only verify if present in solution/modules
+                actual_net = resource_summary_dict[unit]['net']
+                status_ok = actual_net >= -1e-6 # Tolerance
                 status_str = "OK" if status_ok else "VIOLATED"
-                verification_str = f"Below Input  {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({status_str})"
+                verification_str = f"Internal Net    {unit:<15}: Actual={actual_net:10.2f} >= Limit=   0.00 ({status_str})"
                 constraint_verification_list.append(verification_str)
 
-            if is_above and pd.notna(limit):
-                actual_output = total_outputs.get(unit, 0)
-                status_ok = actual_output >= limit - 1e-6 # Tolerance
-                status_str = "OK" if status_ok else "VIOLATED"
-                verification_str = f"Above Output {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({status_str})"
-                constraint_verification_list.append(verification_str)
         results["constraint_verification"] = constraint_verification_list
 
     return results
 
 
 # --- Orchestration Function ---
-def run_datacenter_placement_optimization(modules_path, spec_path): # Removed max_instances
+def run_datacenter_placement_optimization(modules_path, spec_path):
     """
     Orchestrates the datacenter placement optimization process.
 
@@ -465,6 +576,9 @@ def run_datacenter_placement_optimization(modules_path, spec_path): # Removed ma
         module_data, all_specs_df, module_ids, unique_spec_names = load_data(modules_path, spec_path)
     except SystemExit:
         return None
+    except Exception as e:
+        print(f"Unexpected error during data loading: {e}")
+        return None
 
     # 2. Iterate through each specification and solve
     for spec_name in unique_spec_names:
@@ -475,33 +589,33 @@ def run_datacenter_placement_optimization(modules_path, spec_path): # Removed ma
             continue
 
         # *** Extract Total Dimensions for this Spec ***
-        total_width = current_spec_df[
-            (current_spec_df['Unit'] == 'space_x') & (current_spec_df['Below_Amount'] == 1)
-        ]['Amount'].iloc[0] if not current_spec_df[
-            (current_spec_df['Unit'] == 'space_x') & (current_spec_df['Below_Amount'] == 1)
-        ].empty else 0
-
-        total_height = current_spec_df[
-            (current_spec_df['Unit'] == 'space_y') & (current_spec_df['Below_Amount'] == 1)
-        ]['Amount'].iloc[0] if not current_spec_df[
-            (current_spec_df['Unit'] == 'space_y') & (current_spec_df['Below_Amount'] == 1)
-        ].empty else 0
-
         try:
-            total_width = int(total_width)
-            total_height = int(total_height)
+            width_rows = current_spec_df[
+                (current_spec_df['Unit'] == 'space_x') & (current_spec_df['Below_Amount'] == 1)
+            ]['Amount']
+            height_rows = current_spec_df[
+                (current_spec_df['Unit'] == 'space_y') & (current_spec_df['Below_Amount'] == 1)
+            ]['Amount']
+
+            if width_rows.empty or height_rows.empty:
+                 raise ValueError("Missing Space_X or Space_Y Below_Amount constraint.")
+
+            total_width = int(width_rows.iloc[0])
+            total_height = int(height_rows.iloc[0])
+
             if total_width <= 0 or total_height <= 0:
                 raise ValueError("Total dimensions must be positive.")
-        except (ValueError, TypeError):
+
+        except (ValueError, TypeError, IndexError) as e:
              print(f"\nError: Invalid or missing total dimensions (Space_X/Y Below_Amount constraints) "
-                   f"for specification '{spec_name}'. Skipping.")
+                   f"for specification '{spec_name}'. Details: {e}. Skipping.")
              all_results.append({"spec_name": spec_name, "status": "Skipped - Invalid Dimensions", "placed_modules": []})
              continue
 
         # Solve the placement problem
         spec_result = solve_datacenter_placement(
             module_data, current_spec_df, module_ids, spec_name,
-            total_width, total_height # Removed max_instances argument
+            total_width, total_height
         )
         all_results.append(spec_result)
 
@@ -512,25 +626,27 @@ def run_datacenter_placement_optimization(modules_path, spec_path): # Removed ma
 if __name__ == "__main__":
     print("--- Starting Datacenter Placement Optimization Script (CP-SAT) ---")
 
-    # Need module_data here to look up names for the final print
+    # Pre-load module data for final printing names, handle potential errors
+    module_data_for_print = {}
     try:
-        module_data_for_print, _, _, _ = load_data(MODULES_CSV_PATH, SPEC_CSV_PATH)
+        # Use a separate call or ensure load_data is robust
+        temp_module_data, _, _, _ = load_data(MODULES_CSV_PATH, SPEC_CSV_PATH)
+        module_data_for_print = temp_module_data
     except SystemExit:
-        module_data_for_print = {} # Handle case where loading fails before run
-        print("\n--- Script Exited Due to Data Loading Errors ---")
+        print("\n--- Script Exited Due to Initial Data Loading Errors ---")
         sys.exit(1)
     except Exception as e:
-        module_data_for_print = {}
-        print(f"\n--- Unexpected error during initial data load for printing: {e} ---")
-        # Decide if you want to exit or continue without names
+        print(f"\n--- Unexpected error during initial data load for printing names: {e} ---")
+        # Decide if continuing without names is acceptable
         # sys.exit(1) # Optional: exit if names are critical
 
     optimization_results = run_datacenter_placement_optimization(
-        MODULES_CSV_PATH, SPEC_CSV_PATH # Removed DEFAULT_MAX_INSTANCES_PER_TYPE argument
+        MODULES_CSV_PATH, SPEC_CSV_PATH
     )
 
     if optimization_results is None:
         # Error message already printed in run_... function or load_data
+        print("\n--- Optimization run failed or was skipped. ---")
         sys.exit(1)
 
     print("\n\n--- Final Placement Optimization Results ---")
@@ -538,59 +654,63 @@ if __name__ == "__main__":
     # Print results for each spec in the requested format
     for result in optimization_results:
         print(f"\n========== Results for Specification: {result['spec_name']} ==========")
-        print(f"Status: {result['status']}") # Removed solve time here, can be added if needed
+        print(f"Status: {result['status']} (Solve Time: {result.get('solve_time_seconds', 'N/A'):.2f}s)")
 
         if result['status'] in ["OPTIMAL", "FEASIBLE"]:
-            if result['objective_value'] is not None:
-                 # Format matches user request
-                 print(f"Optimal Objective Value = {result['objective_value']:.4f}")
+            obj_val = result.get('objective_value')
+            if obj_val is not None:
+                 print(f"Optimal Objective Value = {obj_val:.4f}")
             else:
-                 print("Objective Value = None") # Should not happen for OPTIMAL/FEASIBLE with CP-SAT
+                 print("Objective Value = N/A") # Should not happen for OPTIMAL/FEASIBLE with CP-SAT
 
-            print("\nSelected Modules:") # Changed header
-            if result.get('selected_modules_counts'): # Use .get for safety
-                # Sort by module ID for consistent output
+            print("\nSelected Modules (Count):")
+            if result.get('selected_modules_counts'):
                 sorted_mod_ids = sorted(result['selected_modules_counts'].keys())
                 for mod_id in sorted_mod_ids:
                     count = result['selected_modules_counts'][mod_id]
-                    # Look up name, handle potential missing module_data
                     mod_name = module_data_for_print.get(mod_id, {}).get('name', f"Unknown_ID_{mod_id}")
                     print(f"  - {mod_name} (ID: {mod_id}): {count}")
             else:
-                print("  (No modules selected/placed)") # Adjusted message
+                print("  (No modules selected/placed)")
+
+            print("\nPlaced Modules (Coordinates):")
+            if result.get('placed_modules'):
+                # Sort by y then x for potentially clearer layout representation
+                sorted_placed = sorted(result['placed_modules'], key=lambda p: (p['y'], p['x']))
+                for p_mod in sorted_placed:
+                     mod_name = module_data_for_print.get(p_mod['id'], {}).get('name', f"Unknown_ID_{p_mod['id']}")
+                     print(f"  - {mod_name} (ID: {p_mod['id']}): X={p_mod['x']}, Y={p_mod['y']} (W={p_mod['width']}, H={p_mod['height']})")
+            else:
+                 print("  (No modules placed)")
+
 
             print("\nResulting Resource Summary:")
-            if result.get('resource_summary'): # Use .get for safety
+            if result.get('resource_summary'):
                 # Sort by unit name for consistent output
                 for unit in sorted(result['resource_summary'].keys()):
+                    # Skip dimension resources in summary unless needed
+                    if unit in DIMENSION_RESOURCES: continue
                     res = result['resource_summary'][unit]
-                    # Format matches user request
                     print(f"  - {unit:<20}: Input={res['input']:10.2f}, Output={res['output']:10.2f}, Net={res['net']:10.2f}")
             else:
                 print("  (Resource summary not calculated)")
 
             print("\nConstraint Verification:")
-            if result.get('constraint_verification'): # Use .get for safety
+            if result.get('constraint_verification'):
                 for line in result['constraint_verification']:
-                     # Add prefix to match user request
                     print(f"  - {line}")
             else:
-                 print("  (No resource constraints to verify)")
+                 print("  (No constraints to verify or verification failed)")
 
         elif result['status'] == 'INFEASIBLE':
             print("\nDetails: The problem is infeasible. No valid placement satisfies all constraints.")
-        # Add brief messages for other statuses if desired
-        # elif result['status'] == 'MODEL_INVALID':
-        #      print("\nDetails: The CP-SAT model formulation is invalid.")
-        # elif result['status'] == 'UNKNOWN':
-        #      print("\nDetails: Solver finished with an unknown status (e.g., time limit reached).")
+            # You might want to add analysis here later, e.g., finding conflicting constraints if possible.
         elif "Skipped" in result['status']:
              print(f"\nDetails: {result['status']}")
         else:
-            print(f"\nDetails: Solver finished with status: {result['status']}")
+            print(f"\nDetails: Solver finished with status: {result['status']}. Solution might be partial or non-existent.")
 
-        # Print the final separator line as requested
-        print("=" * 63) # Adjusted length to roughly match example
+        print("=" * 63)
 
     print("\n--- All Specifications Processed ---")
     print("\n--- Script Finished ---")
