@@ -1,12 +1,12 @@
 """
 Solves the datacenter module configuration problem using Mixed Integer Linear Programming (MILP),
-considering total area constraints.
+considering total area constraints and specific rules for input, output, and internal resources.
 
 This script reads module specifications and datacenter requirements from CSV files,
 formulates an optimization problem for each datacenter specification found,
 and uses the PuLP library with the CBC solver to find the optimal number of each module
-to maximize/minimize certain resource net values while satisfying input/output constraints
-and a total area constraint.
+to maximize/minimize certain resource net values while satisfying input/output constraints,
+internal resource balance, and a total area constraint.
 """
 import pandas as pd
 import pulp
@@ -20,6 +20,12 @@ SPEC_CSV_PATH = "data/Data_Center_Spec.csv"
 SPACE_X_UNIT = "space_x"
 SPACE_Y_UNIT = "space_y"
 TOTAL_AREA_UNIT = "total_area"
+
+# --- Resource Categories (Raw Names) ---
+# These will be standardized before use
+_RAW_INPUT_RESOURCES = ['Price', 'Grid_Connection', 'Water_Connection']
+_RAW_OUTPUT_RESOURCES = ['External_Network', 'Data_Storage', 'Processing']
+_RAW_INTERNAL_RESOURCES = ['Usable_Power', 'Fresh_Water', 'Distilled_Water', 'Chilled_Water', 'Internal_Network']
 
 
 # --- Helper Function to Load and Process Data ---
@@ -38,6 +44,18 @@ def standardize_unit_name(name):
     if pd.isna(name):
         return None
     return str(name).strip().lower().replace(' ', '_')
+
+# --- Standardized Resource Categories ---
+# Apply standardization to the raw lists
+INPUT_RESOURCES = {standardize_unit_name(r) for r in _RAW_INPUT_RESOURCES}
+OUTPUT_RESOURCES = {standardize_unit_name(r) for r in _RAW_OUTPUT_RESOURCES}
+INTERNAL_RESOURCES = {standardize_unit_name(r) for r in _RAW_INTERNAL_RESOURCES}
+# Ensure no overlap between categories (optional sanity check)
+if INPUT_RESOURCES & OUTPUT_RESOURCES or \
+   INPUT_RESOURCES & INTERNAL_RESOURCES or \
+   OUTPUT_RESOURCES & INTERNAL_RESOURCES:
+    print("Warning: Overlap detected between resource categories after standardization.")
+    # You might want to raise an error here depending on requirements
 
 
 def load_data(modules_path, spec_path):
@@ -98,16 +116,9 @@ def load_data(modules_path, spec_path):
         outputs = {k: v for k, v in outputs_series.items() if pd.notna(v)}
 
         # --- Calculate Module Area ---
-        # Get Space_X and Space_Y values (assuming they are inputs for simplicity, adjust if needed)
-        # Use .get() with default 0 in case a module doesn't have space defined
+        # Get Space_X and Space_Y values
         space_x = inputs_series.get(SPACE_X_UNIT, 0)
         space_y = inputs_series.get(SPACE_Y_UNIT, 0)
-
-        # Alternative: Directly query df_mod if space isn't input/output
-        # space_x_row = df_mod[df_mod['Unit'] == SPACE_X_UNIT]
-        # space_y_row = df_mod[df_mod['Unit'] == SPACE_Y_UNIT]
-        # space_x = space_x_row['Amount'].iloc[0] if not space_x_row.empty else 0
-        # space_y = space_y_row['Amount'].iloc[0] if not space_y_row.empty else 0
 
         area = space_x * space_y
         if area < 0: # Ensure area is non-negative
@@ -128,11 +139,6 @@ def load_data(modules_path, spec_path):
 
 
     # --- Process Spec Data (Load all, identify unique names) ---
-    # Standardize unit names first (already done)
-    # specs_df['Unit'] = specs_df['Unit'].apply(standardize_unit_name) # Done above
-    # specs_df.dropna(subset=['Unit'], inplace=True) # Done above
-
-    # Get unique specification names
     unique_spec_names = specs_df['Name'].unique()
     if len(unique_spec_names) == 0:
         print(f"Error: No specifications found in {spec_path}")
@@ -142,7 +148,6 @@ def load_data(modules_path, spec_path):
     num_cols_spec = ['Below_Amount', 'Above_Amount', 'Minimize', 'Maximize', 'Unconstrained', 'Amount']
     for col in num_cols_spec:
          if col in specs_df.columns:
-              # Use errors='coerce' to handle non-numeric values gracefully
               specs_df[col] = pd.to_numeric(specs_df[col], errors='coerce')
          else:
               print(f"Warning: Column '{col}' not found in {spec_path}")
@@ -152,7 +157,6 @@ def load_data(modules_path, spec_path):
     flag_cols = ['Below_Amount', 'Above_Amount', 'Minimize', 'Maximize', 'Unconstrained']
     for col in flag_cols:
         if col in specs_df.columns:
-             # Fill NaN with 0 and ensure integer type for flags
              specs_df[col] = specs_df[col].fillna(0).astype(int)
 
     # --- Extract Space Limits per Specification ---
@@ -162,7 +166,6 @@ def load_data(modules_path, spec_path):
         limit_x_row = spec_df_filtered[spec_df_filtered['Unit'] == SPACE_X_UNIT]
         limit_y_row = spec_df_filtered[spec_df_filtered['Unit'] == SPACE_Y_UNIT]
 
-        # Get the first valid limit found for X and Y for this spec
         limit_x = limit_x_row['Amount'].iloc[0] if not limit_x_row.empty and pd.notna(limit_x_row['Amount'].iloc[0]) else None
         limit_y = limit_y_row['Amount'].iloc[0] if not limit_y_row.empty and pd.notna(limit_y_row['Amount'].iloc[0]) else None
 
@@ -175,14 +178,14 @@ def load_data(modules_path, spec_path):
 
     print(f"--- Loaded Data ---")
     print(f"Found {len(module_data)} module types.")
-    # Print area for verification
-    # for mod_id, data in module_data.items():
-    #     print(f"  - Module {mod_id} ({data['name']}): Area = {data['area']:.2f}")
     print(f"Found {len(specs_df)} total spec rules across {len(unique_spec_names)} specifications.")
     print(f"Specifications to solve: {', '.join(unique_spec_names)}")
+    print(f"Identified Resource Categories:")
+    print(f"  Input: {', '.join(sorted(list(INPUT_RESOURCES)))}")
+    print(f"  Output: {', '.join(sorted(list(OUTPUT_RESOURCES)))}")
+    print(f"  Internal: {', '.join(sorted(list(INTERNAL_RESOURCES)))}")
     print("-" * 30)
 
-    # Return module data, the *full* specs dataframe, module IDs, and unique spec names
     return module_data, specs_df, module_ids, unique_spec_names, spec_limits
 
 
@@ -190,10 +193,11 @@ def load_data(modules_path, spec_path):
 def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec_name, total_area_limit_input):
     """
     Creates and solves the MILP problem for a specific datacenter specification,
-    including total area constraints.
+    including total area constraints and resource category rules.
 
     Formulates the objective function and constraints based on the provided
-    specification rules and module data. Solves the problem using PuLP and CBC.
+    specification rules, module data, and resource category logic. Solves the
+    problem using PuLP and CBC.
 
     Args:
         module_data (dict): Dictionary mapping module IDs to their info (including 'area').
@@ -224,69 +228,85 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
         "objective_value": None,
         "selected_modules": [],
         "resource_summary": {},
-        "total_area_used": None, # Added field for area
-        "total_area_limit": total_area_limit_input, # Store the passed-in limit
+        "total_area_used": None,
+        "total_area_limit": total_area_limit_input,
         "constraint_verification": []
     }
 
     # --- 1. Create the Problem ---
-    prob = pulp.LpProblem(f"DataCenter_{target_spec_name}_Area", pulp.LpMaximize) # Use spec name in problem name
+    prob = pulp.LpProblem(f"DataCenter_{target_spec_name}_Area_ResourceRules", pulp.LpMaximize) # Updated problem name
 
     # --- 2. Define Decision Variables ---
     module_vars = pulp.LpVariable.dicts(
         "Module", module_ids, lowBound=0, cat='Integer'
     )
 
-    # --- 3. Define Objective Function ---
+    # --- 3. Define Objective Function (Applying Resource Rules) ---
     objective = pulp.LpAffineExpression()
-    objective_terms_added = 0 # Counter to check if objective is empty
+    objective_terms_added = 0
 
-    print("Building Objective:")
+    print("Building Objective (Applying Resource Rules):")
     for _, row in target_spec_df.iterrows():
         unit = row['Unit']
-        if unit is None: continue # Skip if unit name is invalid
-        # Skip space/area units in objective, they are usually constraints
-        if unit in [SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT]:
-            continue
+        if unit is None: continue
+        if unit in [SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT]: continue # Skip space/area units
 
         weight = 0
-        if row['Maximize'] == 1:
-            weight = 1
-        elif row['Minimize'] == 1:
-            weight = -1
+        valid_objective = True
 
-        if weight != 0:
-            # Calculate net contribution expression for this unit across all modules
+        if row['Maximize'] == 1:
+            if unit in INPUT_RESOURCES:
+                print(f"  - Warning: Ignoring 'Maximize' for INPUT resource '{unit}'. Input resources can only be minimized.")
+                valid_objective = False
+            elif unit in INTERNAL_RESOURCES:
+                print(f"  - Warning: Ignoring 'Maximize' for INTERNAL resource '{unit}'. Internal resources cannot be in the objective.")
+                valid_objective = False
+            elif unit in OUTPUT_RESOURCES:
+                weight = 1 # Valid: Maximize Output resource
+            else: # Uncategorized resource
+                print(f"  - Warning: Resource '{unit}' is not categorized. Allowing 'Maximize'.")
+                weight = 1
+        elif row['Minimize'] == 1:
+            if unit in OUTPUT_RESOURCES:
+                print(f"  - Warning: Ignoring 'Minimize' for OUTPUT resource '{unit}'. Output resources can only be maximized.")
+                valid_objective = False
+            elif unit in INTERNAL_RESOURCES:
+                print(f"  - Warning: Ignoring 'Minimize' for INTERNAL resource '{unit}'. Internal resources cannot be in the objective.")
+                valid_objective = False
+            elif unit in INPUT_RESOURCES:
+                weight = -1 # Valid: Minimize Input resource
+            else: # Uncategorized resource
+                 print(f"  - Warning: Resource '{unit}' is not categorized. Allowing 'Minimize'.")
+                 weight = -1
+
+        if valid_objective and weight != 0:
             net_unit_expr = pulp.lpSum(
                 (module_data[mod_id]['outputs'].get(unit, 0) - module_data[mod_id]['inputs'].get(unit, 0))
                 * module_vars[mod_id]
                 for mod_id in module_ids
             )
-            # Only add if the expression is not empty
-            if net_unit_expr: # Check if it has terms
+            if net_unit_expr:
                  print(f"  - Adding objective term for unit '{unit}' with weight {weight}")
                  objective += weight * net_unit_expr
                  objective_terms_added += 1
 
     if objective_terms_added == 0:
-        print("  - Warning: No terms were added to the objective function!")
-        # Add a dummy objective if it's empty to avoid PuLP errors
-        objective += 0.0
+        print("  - Warning: No valid terms were added to the objective function based on resource rules!")
+        objective += 0.0 # Dummy objective
 
     prob += objective, "Overall_Objective"
     print("-" * 30)
 
-    # --- 4. Define Constraints ---
-    print("Adding Constraints:")
+    # --- 4. Define Constraints (Applying Resource Rules) ---
+    print("Adding Constraints (Applying Resource Rules):")
     constraints_added = 0
 
-    # --- NEW: Add Total Area Constraint using the pre-calculated limit ---
+    # --- Area Constraint ---
     if total_area_limit_input is not None and total_area_limit_input > 0:
         area_expr = pulp.lpSum(
             module_data[mod_id]['area'] * module_vars[mod_id]
             for mod_id in module_ids if module_data[mod_id]['area'] > 0
         )
-        # Only add constraint if the expression is not empty
         if area_expr:
             constraint = area_expr <= total_area_limit_input
             prob += constraint, f"Limit_{TOTAL_AREA_UNIT}"
@@ -294,63 +314,107 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
             constraints_added += 1
         else:
             print(f"  - Skipping Area constraint (no modules have area > 0).")
-
     else:
         print(f"  - Info: No valid total area limit provided or calculated ({total_area_limit_input}). Area constraint not applied.")
 
-
-    # --- Add Standard Input/Output Constraints from Spec Rules ---
+    # --- Constraints from Spec Rules (Applying Resource Rules) ---
     for _, row in target_spec_df.iterrows():
         unit = row['Unit']
         limit = row['Amount']
 
         if unit is None or pd.isna(limit):
-            if unit:
-                 print(f"  - Warning: Skipping constraint for {unit} due to missing limit.")
-            continue # Skip if unit name is invalid or limit is missing
+            if unit: print(f"  - Warning: Skipping constraint for {unit} due to missing limit.")
+            continue
 
-        # --- Ignore Space_X/Space_Y/Total_Area Below_Amount constraints here ---
-        # They are handled by the pre-calculated limit or ignored.
-        if unit in [SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT] and row['Below_Amount'] == 1:
-             # Print info message only if it wasn't the source of the limit
-             if unit != SPACE_X_UNIT and unit != SPACE_Y_UNIT:
-                 print(f"  - Ignoring explicit constraint for {unit} (handled separately or ignored).")
+        # Skip space/area units here (area handled above, space limits used for area calc)
+        if unit in [SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT]:
              continue
 
-        # Below Amount Constraint (Limit on Total Input) - Excluding space/area
-        if row['Below_Amount'] == 1: # Already checked unit not in [SPACE_X/Y/AREA]
-            input_expr = pulp.lpSum(
-                module_data[mod_id]['inputs'].get(unit, 0) * module_vars[mod_id]
-                for mod_id in module_ids
-            )
-            # Only add constraint if the expression is not trivially zero
-            if input_expr:
-                constraint = input_expr <= limit
-                prob += constraint, f"Limit_Input_{unit}"
-                print(f"  - INPUT {unit} <= {limit}")
-                constraints_added += 1
-            else:
-                 print(f"  - Skipping 'Below' constraint for {unit} (no modules consume it).")
+        valid_constraint = True
+        constraint_type = None # 'Below', 'Above'
+
+        # Below Amount Constraint (Limit on Total Input or Net Consumption)
+        if row['Below_Amount'] == 1:
+            if unit in OUTPUT_RESOURCES:
+                 print(f"  - Warning: Ignoring 'Below_Amount' for OUTPUT resource '{unit}'. Output resources can only have 'Above_Amount'.")
+                 valid_constraint = False
+            elif unit in INTERNAL_RESOURCES:
+                 print(f"  - Warning: Ignoring 'Below_Amount' for INTERNAL resource '{unit}'. Internal resources have fixed balance constraints.")
+                 valid_constraint = False
+            elif unit in INPUT_RESOURCES:
+                 constraint_type = 'Below' # Valid: Limit Input resource
+            else: # Uncategorized resource
+                 print(f"  - Warning: Resource '{unit}' is not categorized. Allowing 'Below_Amount'.")
+                 constraint_type = 'Below'
+
+            if valid_constraint and constraint_type == 'Below':
+                # For Input resources, constrain the total input
+                input_expr = pulp.lpSum(
+                    module_data[mod_id]['inputs'].get(unit, 0) * module_vars[mod_id]
+                    for mod_id in module_ids
+                )
+                if input_expr:
+                    constraint = input_expr <= limit
+                    prob += constraint, f"Limit_Input_{unit}"
+                    print(f"  - INPUT {unit} <= {limit}")
+                    constraints_added += 1
+                else:
+                    print(f"  - Skipping 'Below' constraint for {unit} (no modules consume it).")
 
 
-        # Above Amount Constraint (Minimum Total Output) - Excluding space/area
-        elif row['Above_Amount'] == 1 and unit not in [SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT]:
-            output_expr = pulp.lpSum(
-                module_data[mod_id]['outputs'].get(unit, 0) * module_vars[mod_id]
-                for mod_id in module_ids
-            )
-             # Only add constraint if the expression is not trivially zero
-            if output_expr:
-                constraint = output_expr >= limit
-                prob += constraint, f"Require_Output_{unit}"
-                print(f"  - OUTPUT {unit} >= {limit}")
-                constraints_added +=1
-            else:
-                 print(f"  - Skipping 'Above' constraint for {unit} (no modules produce it).")
+        # Above Amount Constraint (Minimum Total Output or Net Production)
+        elif row['Above_Amount'] == 1:
+            if unit in INPUT_RESOURCES:
+                 print(f"  - Warning: Ignoring 'Above_Amount' for INPUT resource '{unit}'. Input resources can only have 'Below_Amount'.")
+                 valid_constraint = False
+            elif unit in INTERNAL_RESOURCES:
+                 print(f"  - Warning: Ignoring 'Above_Amount' for INTERNAL resource '{unit}'. Internal resources have fixed balance constraints.")
+                 valid_constraint = False
+            elif unit in OUTPUT_RESOURCES:
+                 constraint_type = 'Above' # Valid: Require Output resource
+            else: # Uncategorized resource
+                 print(f"  - Warning: Resource '{unit}' is not categorized. Allowing 'Above_Amount'.")
+                 constraint_type = 'Above'
+
+            if valid_constraint and constraint_type == 'Above':
+                 # For Output resources, constrain the total output
+                 output_expr = pulp.lpSum(
+                     module_data[mod_id]['outputs'].get(unit, 0) * module_vars[mod_id]
+                     for mod_id in module_ids
+                 )
+                 if output_expr:
+                     constraint = output_expr >= limit
+                     prob += constraint, f"Require_Output_{unit}"
+                     print(f"  - OUTPUT {unit} >= {limit}")
+                     constraints_added +=1
+                 else:
+                     print(f"  - Skipping 'Above' constraint for {unit} (no modules produce it).")
 
 
-    # Store the found area limit in results - ALREADY DONE AT INITIALIZATION
-    # results["total_area_limit"] = total_area_limit_input
+    # --- Add Internal Resource Balance Constraints (Net >= 0) ---
+    print("\nAdding Internal Resource Balance Constraints:")
+    internal_constraints_added = 0
+    for unit in INTERNAL_RESOURCES:
+        net_internal_expr = pulp.lpSum(
+            (module_data[mod_id]['outputs'].get(unit, 0) - module_data[mod_id]['inputs'].get(unit, 0))
+            * module_vars[mod_id]
+            for mod_id in module_ids
+        )
+        # Only add constraint if the expression is not trivially zero
+        # (i.e., if the resource is actually used/produced by some module)
+        # Check if the expression has any variables associated with it
+        if net_internal_expr is not None and (hasattr(net_internal_expr, 'variables') and net_internal_expr.variables()):
+            constraint = net_internal_expr >= 0
+            prob += constraint, f"Balance_Internal_{unit}"
+            print(f"  - NET INTERNAL {unit} >= 0")
+            internal_constraints_added += 1
+            constraints_added += 1
+        # else:
+        #     print(f"  - Skipping internal balance for {unit} (not used/produced by any module).")
+
+    if internal_constraints_added == 0:
+        print("  - No internal resource balance constraints added (or needed).")
+
 
     if constraints_added == 0:
          print("  - Warning: No constraints were added to the problem!")
@@ -366,7 +430,12 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
     status = pulp.LpStatus[prob.status]
     results["status"] = status
 
-    objective_value = pulp.value(prob.objective)
+    objective_value = None
+    try:
+        # Reading objective value might fail if problem is infeasible/unbounded
+        objective_value = pulp.value(prob.objective)
+    except AttributeError:
+        print("  - Could not retrieve objective value (likely due to status).")
     results["objective_value"] = objective_value
 
 
@@ -374,18 +443,17 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
         selected_modules_list = []
         total_inputs = {}
         total_outputs = {}
-        total_area = 0.0 # Initialize total area
+        total_area = 0.0
         all_units_in_solution = set()
 
         for mod_id in module_ids:
             count = module_vars[mod_id].varValue
-            if count is not None and count > 1e-6: # Use a small tolerance
+            if count is not None and count > 1e-6:
                 int_count = int(round(count))
                 if int_count > 0:
                     mod_info = module_data[mod_id]
                     selected_modules_list.append({'id': mod_id, 'name': mod_info['name'], 'count': int_count})
 
-                    # Accumulate resources
                     for unit, amount in mod_info['inputs'].items():
                         total_inputs[unit] = total_inputs.get(unit, 0) + amount * int_count
                         all_units_in_solution.add(unit)
@@ -393,17 +461,27 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
                         total_outputs[unit] = total_outputs.get(unit, 0) + amount * int_count
                         all_units_in_solution.add(unit)
 
-                    # Accumulate total area
                     total_area += mod_info['area'] * int_count
 
         results["selected_modules"] = selected_modules_list
-        results["total_area_used"] = total_area # Store calculated area
+        results["total_area_used"] = total_area
 
         # --- Calculate Resource Totals ---
         resource_summary_dict = {}
-        # Include units from spec AND units from solution
-        spec_units = set(target_spec_df['Unit'].dropna()) - {SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT} # Exclude space/area units here
-        relevant_units = sorted(list(all_units_in_solution | spec_units))
+        # Include units from spec (that weren't ignored), units from solution, and internal resources
+        spec_units_used = set()
+        for _, row in target_spec_df.iterrows():
+             unit = row['Unit']
+             if unit is None: continue
+             if unit in [SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT]: continue
+             # Check if the constraint/objective for this unit was potentially valid according to rules
+             is_input_ok = unit in INPUT_RESOURCES and (row['Below_Amount']==1 or row['Minimize']==1)
+             is_output_ok = unit in OUTPUT_RESOURCES and (row['Above_Amount']==1 or row['Maximize']==1)
+             is_uncategorized_ok = unit not in INPUT_RESOURCES and unit not in OUTPUT_RESOURCES and unit not in INTERNAL_RESOURCES
+             if is_input_ok or is_output_ok or is_uncategorized_ok:
+                 spec_units_used.add(unit)
+
+        relevant_units = sorted(list(all_units_in_solution | spec_units_used | INTERNAL_RESOURCES))
 
         for unit in relevant_units:
             inp = total_inputs.get(unit, 0)
@@ -414,43 +492,63 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
 
         # --- Verify Constraints ---
         constraint_verification_list = []
-        tolerance = 1e-6 # Tolerance for float comparison
+        tolerance = 1e-6
 
-        # --- Verify Area Constraint Separately ---
+        # --- Verify Area Constraint ---
         if results["total_area_limit"] is not None and results["total_area_limit"] > 0:
             actual_area = total_area
             limit = results["total_area_limit"]
             status_ok = actual_area <= limit + tolerance
             status_str = "OK" if status_ok else "VIOLATED"
-            verification_str = f"Below Area   {TOTAL_AREA_UNIT:<15}: Actual={actual_area:10.2f} <= Limit={limit:10.2f} ({status_str})"
+            verification_str = f"Area Limit   {TOTAL_AREA_UNIT:<15}: Actual={actual_area:10.2f} <= Limit={limit:10.2f} ({status_str})"
             constraint_verification_list.append(verification_str)
 
-        # --- Verify Other Constraints from Spec Rules ---
+        # --- Verify Constraints from Spec Rules (Only if applied) ---
         for _, row in target_spec_df.iterrows():
             unit = row['Unit']
             limit = row['Amount']
             if unit is None or pd.isna(limit): continue
+            if unit in [SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT]: continue
 
-            # Skip Area/Space constraints verification here as they are handled above or ignored
-            if unit in [SPACE_X_UNIT, SPACE_Y_UNIT, TOTAL_AREA_UNIT]:
-                continue
-
-            # Verify Below Input Constraints
-            if row['Below_Amount'] == 1:
+            # Verify Below Input Constraints (if it was valid and applied)
+            if row['Below_Amount'] == 1 and unit in INPUT_RESOURCES:
                 actual_input = total_inputs.get(unit, 0)
                 status_ok = actual_input <= limit + tolerance
                 status_str = "OK" if status_ok else "VIOLATED"
                 verification_str = f"Below Input  {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({status_str})"
                 constraint_verification_list.append(verification_str)
+            elif row['Below_Amount'] == 1 and unit not in INPUT_RESOURCES and unit not in OUTPUT_RESOURCES and unit not in INTERNAL_RESOURCES: # Uncategorized
+                actual_input = total_inputs.get(unit, 0) # Assuming Below means input for uncategorized
+                status_ok = actual_input <= limit + tolerance
+                status_str = "OK" if status_ok else "VIOLATED"
+                verification_str = f"Below Uncat. {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({status_str})"
+                constraint_verification_list.append(verification_str)
 
 
-            # Verify Above Output Constraints
-            elif row['Above_Amount'] == 1:
+            # Verify Above Output Constraints (if it was valid and applied)
+            elif row['Above_Amount'] == 1 and unit in OUTPUT_RESOURCES:
                 actual_output = total_outputs.get(unit, 0)
                 status_ok = actual_output >= limit - tolerance
                 status_str = "OK" if status_ok else "VIOLATED"
                 verification_str = f"Above Output {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({status_str})"
                 constraint_verification_list.append(verification_str)
+            elif row['Above_Amount'] == 1 and unit not in INPUT_RESOURCES and unit not in OUTPUT_RESOURCES and unit not in INTERNAL_RESOURCES: # Uncategorized
+                actual_output = total_outputs.get(unit, 0) # Assuming Above means output for uncategorized
+                status_ok = actual_output >= limit - tolerance
+                status_str = "OK" if status_ok else "VIOLATED"
+                verification_str = f"Above Uncat. {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({status_str})"
+                constraint_verification_list.append(verification_str)
+
+        # --- Verify Internal Resource Balance Constraints ---
+        for unit in INTERNAL_RESOURCES:
+             # Check if constraint was actually added (i.e., resource is relevant)
+             constraint_name = f"Balance_Internal_{unit}"
+             if constraint_name in prob.constraints:
+                 net_val = resource_summary_dict.get(unit, {}).get("net", 0)
+                 status_ok = net_val >= 0 - tolerance
+                 status_str = "OK" if status_ok else "VIOLATED"
+                 verification_str = f"Internal Bal {unit:<15}: Actual Net={net_val:10.2f} >= Limit=   0.00 ({status_str})"
+                 constraint_verification_list.append(verification_str)
 
 
         results["constraint_verification"] = constraint_verification_list
@@ -461,7 +559,7 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
 # --- Encapsulating Function ---
 def run_datacenter_optimization(modules_path, spec_path):
     """
-    Orchestrates the datacenter optimization process with area constraints.
+    Orchestrates the datacenter optimization process with area constraints and resource rules.
 
     Loads data using load_data(), iterates through each unique specification found,
     calls solve_datacenter_config() for each, and collects the results.
@@ -477,33 +575,29 @@ def run_datacenter_optimization(modules_path, spec_path):
     """
     all_results = []
 
-    # 1. Load Data (including spec limits)
+    # 1. Load Data
     try:
-        # Now unpacks spec_limits as well
         module_data, all_specs_df, module_ids, unique_spec_names, spec_limits = load_data(modules_path, spec_path)
-    except SystemExit: # Catch exit from load_data on error
-        return None # Indicate failure
+    except SystemExit:
+        return None
     except Exception as e:
         print(f"An unexpected error occurred during data loading: {e}")
         return None
 
     # 2. Iterate through each specification and solve
     for spec_name in unique_spec_names:
-        # Filter the specs DataFrame for the current specification
         current_spec_df = all_specs_df[all_specs_df['Name'] == spec_name].copy()
 
         if current_spec_df.empty:
             print(f"\nWarning: No valid rules found for specification '{spec_name}'. Skipping.")
-            # Optionally add a result indicating skipped status
             all_results.append({
-                "spec_name": spec_name,
-                "status": "Skipped - No Rules",
+                "spec_name": spec_name, "status": "Skipped - No Rules",
                 "objective_value": None, "selected_modules": [], "resource_summary": {},
-                "total_area_used": None, "constraint_verification": []
+                "total_area_used": None, "total_area_limit": None, "constraint_verification": []
             })
             continue
 
-        # --- Calculate Total Area Limit for this spec ---
+        # Calculate Total Area Limit for this spec
         limits = spec_limits.get(spec_name, {'space_x': None, 'space_y': None})
         limit_x = limits['space_x']
         limit_y = limits['space_y']
@@ -514,9 +608,8 @@ def run_datacenter_optimization(modules_path, spec_path):
             print(f"\nWarning: Cannot calculate area limit for '{spec_name}' due to missing/invalid Space X/Y limits ({limit_x}, {limit_y}).")
 
 
-        # Solve the problem for the current specification, passing the calculated limit
+        # Solve the problem for the current specification
         try:
-            # Pass calculated_area_limit to the solver function
             spec_result = solve_datacenter_config(module_data, current_spec_df, module_ids, spec_name, calculated_area_limit)
             all_results.append(spec_result)
         except Exception as e:
@@ -526,7 +619,8 @@ def run_datacenter_optimization(modules_path, spec_path):
                 "spec_name": spec_name,
                 "status": f"Error - {type(e).__name__}",
                 "objective_value": None, "selected_modules": [], "resource_summary": {},
-                "total_area_used": None, "constraint_verification": [f"Solver Error: {e}"]
+                "total_area_used": None, "total_area_limit": calculated_area_limit, # Store limit even if error
+                "constraint_verification": [f"Solver Error: {e}"]
             })
 
 
@@ -536,19 +630,16 @@ def run_datacenter_optimization(modules_path, spec_path):
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    print("--- Starting Datacenter Optimization Script (Area Constraint Version) ---")
+    print("--- Starting Datacenter Optimization Script (Area Constraint & Resource Rules Version) ---")
 
-    # Run the optimization for all specs
     optimization_results = run_datacenter_optimization(MODULES_CSV_PATH, SPEC_CSV_PATH)
 
-    # Check if optimization ran successfully
     if optimization_results is None:
         print("\n--- Script Exited Due to Data Loading or Critical Errors ---")
-        sys.exit(1) # Exit if loading failed
+        sys.exit(1)
 
     print("\n\n--- Final Optimization Results ---")
 
-    # Print the results for each specification
     for result in optimization_results:
         print(f"\n========== Results for Specification: {result['spec_name']} ==========")
         print(f"Status: {result['status']}")
@@ -556,13 +647,12 @@ if __name__ == "__main__":
         if result['objective_value'] is not None:
             print(f"Optimal Objective Value = {result['objective_value']:.4f}")
         else:
-             # Provide more context based on status
             if result['status'] not in ["Optimal", "Not Solved", "Skipped - No Rules"] and not result['status'].startswith("Error"):
                  print(f"Objective Value: N/A ({result['status']})")
             elif result['status'].startswith("Error"):
                  print(f"Objective Value: N/A (Solver Error)")
-            else:
-                 print("Optimal Objective Value = None (Objective might be empty or solver issue)")
+            else: # Not Solved, Skipped, or Optimal but objective was 0/empty
+                 print("Objective Value = None (Problem might be infeasible, objective empty, or other solver issue)")
 
 
         if result['status'] == 'Optimal':
@@ -573,7 +663,6 @@ if __name__ == "__main__":
             else:
                 print("  (No modules selected - optimal solution might be zero for all)")
 
-            # Print Total Area Used and Limit
             if result['total_area_used'] is not None:
                 print(f"\nTotal Area Used: {result['total_area_used']:.2f}")
                 if result['total_area_limit'] is not None:
@@ -584,17 +673,23 @@ if __name__ == "__main__":
                     status_str = "OK" if status_ok else "VIOLATED"
                     print(f"Total Area Limit: {limit:.2f} ({status_str})")
                 else:
-                    print("Total Area Limit: Not specified in constraints")
+                    print("Total Area Limit: Not specified or calculated")
 
 
             print("\nResulting Resource Summary:")
             if result['resource_summary']:
-                # Sort units for consistent output
                 for unit in sorted(result['resource_summary'].keys()):
                     res = result['resource_summary'][unit]
-                    print(f"  - {unit:<20}: Input={res['input']:10.2f}, Output={res['output']:10.2f}, Net={res['net']:10.2f}")
+                    category = ""
+                    if unit in INPUT_RESOURCES: category = "(Input)"
+                    elif unit in OUTPUT_RESOURCES: category = "(Output)"
+                    elif unit in INTERNAL_RESOURCES: category = "(Internal)"
+                    elif unit == TOTAL_AREA_UNIT: category = "(Area)"
+                    elif unit in [SPACE_X_UNIT, SPACE_Y_UNIT]: category = "(Space)"
+                    else: category = "(Uncategorized)"
+                    print(f"  - {unit:<20} {category:<15}: Input={res['input']:10.2f}, Output={res['output']:10.2f}, Net={res['net']:10.2f}")
             else:
-                print("  (No non-area resources used or generated)")
+                print("  (No resources used or generated)")
 
 
             print("\nConstraint Verification:")
@@ -602,19 +697,21 @@ if __name__ == "__main__":
                 for line in result['constraint_verification']:
                     print(f"  - {line}")
             else:
-                print("  (No constraints to verify or none were active)")
+                print("  (No constraints to verify or none were active/valid)")
 
         elif result['status'] == 'Infeasible':
-            print("\nDetails: The problem is infeasible. No combination of modules can satisfy all constraints (including area).")
+            print("\nDetails: The problem is infeasible. No combination of modules can satisfy all constraints (including area and resource rules). Check warnings during constraint setup.")
         elif result['status'] == 'Unbounded':
-            print("\nDetails: The problem is unbounded. The objective can be increased indefinitely (check constraints and objective function).")
+            print("\nDetails: The problem is unbounded. The objective can be changed indefinitely (check constraints, objective function, and resource rules).")
         elif result['status'] == 'Skipped - No Rules':
             print("\nDetails: This specification was skipped because no valid rules were found in the input file.")
         elif result['status'].startswith("Error"):
              print(f"\nDetails: An error occurred during solving: {result['constraint_verification'][0] if result['constraint_verification'] else 'Unknown Error'}")
-        # Add other statuses if needed
+        else: # Other statuses like Not Solved, Undefined
+             print(f"\nDetails: Solver finished with status '{result['status']}'. Solution may not be optimal or available.")
 
-        print("=" * (len(result['spec_name']) + 34)) # Footer line matching header width
+
+        print("=" * (len(result['spec_name']) + 34))
 
     print("\n--- All Specifications Processed ---")
     print("\n--- Script Finished ---")
