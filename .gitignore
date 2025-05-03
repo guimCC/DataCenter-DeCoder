@@ -24,8 +24,8 @@ dist-ssr
 *.sw?
 
 venv-*
-backend/venv*
+app/backend/venv*
 .gitignore
-backend/__pycache__/*
+app/backend/__pycache__/*
 
 hackupc/
