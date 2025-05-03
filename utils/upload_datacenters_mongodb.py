@@ -19,7 +19,9 @@ for module in datacenter["modules"]:
         "name": module["name"],
         "io_fields": [],  # This field is required by the Module model; empty list as placeholder
         "gridColumn": grid_column,
-        "gridRow": grid_row
+        "gridRow": grid_row,
+        "width": module["width"],
+        "height": module["height"]
     }
     
     transformed_modules.append(positioned_module)

@@ -6,7 +6,7 @@ import { PositionedModule, DataCenter } from '../types';
 
 const GRID_ROWS = 20;
 const GRID_COLS = 20;
-const CELL_SIZE = 20;
+const CELL_SIZE = 10;
 
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
@@ -513,10 +513,8 @@ const DraggableModule = ({ mod, spanX, spanY }: {
       }
   
       // Get module dimensions for collision detection
-      const spaceX = draggedModule.io_fields.find(io => io.unit === 'Space_X')?.amount || 40;
-      const spaceY = draggedModule.io_fields.find(io => io.unit === 'Space_Y')?.amount || 40;
-      const spanX = Math.max(1, Math.ceil(spaceX / CELL_SIZE));
-      const spanY = Math.max(1, Math.ceil(spaceY / CELL_SIZE));
+      const spanX = draggedModule.width;
+      const spanY = draggedModule.height;
       
       // Ensure the module doesn't go outside grid bounds
       if (col + spanX - 1 > gridDimensions.cols || row + spanY - 1 > gridDimensions.rows) {
@@ -586,7 +584,7 @@ const DraggableModule = ({ mod, spanX, spanY }: {
             setSelectedDC(dcId);
             
             const selected = datacenters.find(dc => dc.id === dcId);
-            console.log("Selected datacenter aaaaaaaaaaaaa:", selected, selected.specs);
+            console.log("Selected datacenter:", selected);
             
             if (selected) {
               // Find space constraints in specs
@@ -594,25 +592,11 @@ const DraggableModule = ({ mod, spanX, spanY }: {
                 spec.Unit?.toLowerCase() === "space_x");
               const spaceYSpec = selected.specs.find(spec => 
                 spec.Unit?.toLowerCase() === "space_y");
-
-              console.log("aaaaaaaa ", spaceXSpec, spaceYSpec);
+          
               let maxGridX = 0;
               let maxGridY = 0;
               
-              // Method 1: Calculate from module positions and sizes
-              if (Array.isArray(selected.modules)) {
-                selected.modules.forEach(mod => {
-                  const gridCol = Math.floor(mod.gridColumn / CELL_SIZE) + 1;
-                  const gridRow = Math.floor(mod.gridRow / CELL_SIZE) + 1;
-                  const width = mod.width ? Math.ceil(mod.width / CELL_SIZE) : 1;
-                  const height = mod.height ? Math.ceil(mod.height / CELL_SIZE) : 1;
-                  
-                  maxGridX = Math.max(maxGridX, gridCol + width);
-                  maxGridY = Math.max(maxGridY, gridRow + height);
-                });
-              }
-              
-              // Method 2: Get from specs if available
+              // Get specs dimensions
               if (spaceXSpec?.Amount) {
                 maxGridX = Math.max(maxGridX, Math.ceil(spaceXSpec.Amount / CELL_SIZE));
               }
@@ -620,11 +604,10 @@ const DraggableModule = ({ mod, spanX, spanY }: {
                 maxGridY = Math.max(maxGridY, Math.ceil(spaceYSpec.Amount / CELL_SIZE));
               }
               
-              // Add padding and set minimum size
+              // Update grid dimensions with padding
               maxGridX = Math.max(maxGridX + 5, GRID_COLS);
               maxGridY = Math.max(maxGridY + 5, GRID_ROWS);
-              
-              // Update grid dimensions
+
               setGridDimensions({
                 rows: maxGridY,
                 cols: maxGridX
@@ -640,17 +623,25 @@ const DraggableModule = ({ mod, spanX, spanY }: {
                 maxSpaceY: spaceYSpec?.Amount?.toString() || "",
               });
           
-              // Convert modules correctly
+              // Convert modules with proper coordinate transformation
               if (Array.isArray(selected.modules)) {
-                const mods: PositionedModule[] = selected.modules.map(m => ({
-                  id: m.id,
-                  name: m.name,
-                  gridColumn: m.gridColumn,
-                  gridRow: m.gridRow,
-                  height: m.height,
-                  width: m.width,
-                  io_fields: m.io_fields || [] 
-                }));
+                const mods: PositionedModule[] = selected.modules.map((m) => {
+                  
+                  // Convert raw coordinates to grid coordinates if they exist,
+                  // otherwise use the module's actual position properties
+                  const gridCol = Math.floor((m.gridColumn || 0) / CELL_SIZE) + 1;
+                  const gridRow = Math.floor((m.gridRow || 0) / CELL_SIZE) + 1;
+
+                  return {
+                    id: m.id,
+                    name: m.name,
+                    gridColumn: gridCol,
+                    gridRow: gridRow,
+                    height: Math.ceil(m.height / CELL_SIZE),
+                    width: Math.ceil(m.width / CELL_SIZE),
+                    io_fields: m.io_fields || []
+                  };
+                });
                 
                 setResultModules(mods);
               } else {
@@ -848,22 +839,14 @@ const DraggableModule = ({ mod, spanX, spanY }: {
                 )}
                 
                 {/* Modules with unique keys */}
-                {resultModules.map((mod, index) => {
-                  const spaceX = mod.io_fields.find(io => io.unit === 'Space_X')?.amount || 40;
-                  const spaceY = mod.io_fields.find(io => io.unit === 'Space_Y')?.amount || 40;
-  
-                  const spanX = Math.max(1, Math.ceil(spaceX / CELL_SIZE));
-                  const spanY = Math.max(1, Math.ceil(spaceY / CELL_SIZE));
-  
-                  return (
-                    <DraggableModule
-                      key={`module-${mod.id}-${index}`}
-                      mod={mod}
-                      spanX={spanX}
-                      spanY={spanY}
-                    />
-                  );
-                })}
+                {resultModules.map((mod, index) => (
+                  <DraggableModule
+                    key={`module-${mod.id}-${index}`}
+                    mod={mod}
+                    spanX={mod.width}  // Use the calculated width property
+                    spanY={mod.height} // Use the calculated height property
+                  />
+                ))}
                 {/* Add ghost preview here */}
                 {ghostPreview.visible && draggedModuleId !== null && (() => {
                 // Get the module being dragged for size info
@@ -871,10 +854,9 @@ const DraggableModule = ({ mod, spanX, spanY }: {
                 if (!draggedModule) return null;
                 
                 // Get module dimensions
-                const spaceX = draggedModule.io_fields.find(io => io.unit === 'Space_X')?.amount || 40;
-                const spaceY = draggedModule.io_fields.find(io => io.unit === 'Space_Y')?.amount || 40;
-                const spanX = Math.max(1, Math.ceil(spaceX / CELL_SIZE));
-                const spanY = Math.max(1, Math.ceil(spaceY / CELL_SIZE));
+
+                const spanX = draggedModule.width;
+                const spanY = draggedModule.height;
                 
                 // Check if placement would go out of bounds
                 const outOfBounds = (ghostPreview.col + spanX - 1 > gridDimensions.cols || 

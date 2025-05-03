@@ -38,6 +38,8 @@ class Module(BaseModel):
 class PositionedModule(Module):
     gridColumn: int
     gridRow: int
+    width: int
+    height: int
 
 class SpecRule(BaseModel):
     Below_Amount: int
