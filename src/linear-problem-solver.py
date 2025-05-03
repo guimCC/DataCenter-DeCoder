@@ -94,7 +94,7 @@ def load_data(modules_path, spec_path):
 def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec_name):
     """Creates and solves the MILP problem for a specific datacenter spec."""
 
-    print(f"\n--- Solving for Specification: {target_spec_name} ---")
+    print(f"\n#####  Solving for Specification: {target_spec_name}  #####\n")
 
     # --- 1. Create the Problem ---
     prob = pulp.LpProblem(f"DataCenter_{target_spec_name}", pulp.LpMaximize) # Use spec name in problem name
