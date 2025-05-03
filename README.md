@@ -123,5 +123,11 @@ Scale up to more complex environments and goals
 
 # Requirements
 **Backend:**
-- pip install fastapi uvicorn pymongo pydantic
-- pip install motor
+- `pip install fastapi uvicorn pymongo pydantic`
+- `pip install motor`
+
+Run with: `uvicorn main:app --reload --port 8000`
+
+**Frontend:
+
+Run with: `npm run dev`

@@ -1,11 +1,34 @@
-import { Button } from '@mui/material';
+import { useEffect, useState } from 'react';
+import { Container, Typography, Button, Card, CardContent } from '@mui/material';
 
 function App() {
+  const [modules, setModules] = useState([]);
+
+  // Fetch modules from FastAPI when page loads
+  useEffect(() => {
+    fetch("http://localhost:8000/modules")
+      .then(res => res.json())
+      .then(data => setModules(data))
+      .catch(err => console.error("Failed to fetch modules:", err));
+  }, []);
+
   return (
-    <div>
-      <h1>Hello Vite + React</h1>
-      <Button variant="contained">Test MUI Button</Button>
-    </div>
+    <Container>
+      <Typography variant="h4" gutterBottom>Data Center Modules</Typography>
+
+      {modules.map((mod, i) => (
+        <Card key={i} sx={{ marginBottom: 2 }}>
+          <CardContent>
+            <Typography variant="h6">{mod.name}</Typography>
+            {mod.io_fields.map((io, j) => (
+              <Typography key={j}>
+                {io.is_input ? "Input" : "Output"} - {io.unit}: {io.amount}
+              </Typography>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+    </Container>
   );
 }
 
