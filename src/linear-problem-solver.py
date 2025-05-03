@@ -1,21 +1,63 @@
+"""
+Solves the datacenter module configuration problem using Mixed Integer Linear Programming (MILP).
+
+This script reads module specifications and datacenter requirements from CSV files,
+formulates an optimization problem for each datacenter specification found,
+and uses the PuLP library with the CBC solver to find the optimal number of each module
+to maximize/minimize certain resource net values while satisfying input/output constraints.
+"""
 import pandas as pd
 import pulp
 import sys
+# Removed math import as it wasn't used
 
 # --- Configuration ---
-# TARGET_DATACENTER_SPEC_NAME = "Server_Square" # Removed - will iterate through all specs
 MODULES_CSV_PATH = "data/Modules.csv"
 SPEC_CSV_PATH = "data/Data_Center_Spec.csv"
 
+
 # --- Helper Function to Load and Process Data ---
 def standardize_unit_name(name):
-    """Converts unit name to a standard format: lowercase, underscore."""
+    """
+    Converts a unit name to a standard format: lowercase with underscores.
+
+    Handles potential NaN values.
+
+    Args:
+        name: The unit name (string or NaN).
+
+    Returns:
+        The standardized unit name as a string, or None if input was NaN.
+    """
     if pd.isna(name):
         return None
     return str(name).strip().lower().replace(' ', '_')
 
+
 def load_data(modules_path, spec_path):
-    """Loads data from CSVs and preprocesses it."""
+    """
+    Loads module and specification data from CSV files and preprocesses it.
+
+    Standardizes unit names, converts relevant columns to numeric types,
+    and structures the data for use in the optimization problem.
+
+    Args:
+        modules_path (str): Path to the Modules CSV file.
+        spec_path (str): Path to the Data Center Specification CSV file.
+
+    Returns:
+        tuple: A tuple containing:
+            - module_data (dict): Dictionary mapping module IDs to their info
+              (name, inputs, outputs).
+            - specs_df (pd.DataFrame): DataFrame containing all processed
+              specification rules.
+            - module_ids (np.ndarray): Array of unique module IDs.
+            - unique_spec_names (np.ndarray): Array of unique specification names
+              found in the specs file.
+    Raises:
+        SystemExit: If CSV files cannot be found or read, or if no specifications
+                    are found in the spec file.
+    """
     try:
         modules_df = pd.read_csv(modules_path, sep=';', quotechar='"', skipinitialspace=True)
         specs_df = pd.read_csv(spec_path, sep=';', quotechar='"', skipinitialspace=True)
@@ -89,11 +131,43 @@ def load_data(modules_path, spec_path):
     # Return module data, the *full* specs dataframe, module IDs, and unique spec names
     return module_data, specs_df, module_ids, unique_spec_names
 
+
 # --- Main Optimization Function ---
 def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec_name):
-    """Creates and solves the MILP problem for a specific datacenter spec."""
+    """
+    Creates and solves the MILP problem for a specific datacenter specification.
 
+    Formulates the objective function and constraints based on the provided
+    specification rules and module data. Solves the problem using PuLP and CBC.
+
+    Args:
+        module_data (dict): Dictionary mapping module IDs to their info.
+        target_spec_df (pd.DataFrame): DataFrame filtered for the rules of the
+                                       current specification.
+        module_ids (np.ndarray): Array of unique module IDs.
+        target_spec_name (str): The name of the specification being solved.
+
+    Returns:
+        dict: A dictionary containing the results of the optimization:
+            - spec_name (str): The name of the specification.
+            - status (str): The solver status ('Optimal', 'Infeasible', etc.).
+            - objective_value (float or None): The optimal value of the objective function.
+            - selected_modules (list): A list of dictionaries, each representing a
+              selected module and its count ({'id', 'name', 'count'}).
+            - resource_summary (dict): A dictionary summarizing the total input, output,
+              and net amount for each relevant resource unit.
+            - constraint_verification (list): A list of strings describing the status
+              of each applied constraint (e.g., "OK" or "VIOLATED").
+    """
     print(f"\n#####  Solving for Specification: {target_spec_name}  #####\n")
+    results = {
+        "spec_name": target_spec_name,
+        "status": "Not Solved",
+        "objective_value": None,
+        "selected_modules": [],
+        "resource_summary": {},
+        "constraint_verification": []
+    }
 
     # --- 1. Create the Problem ---
     prob = pulp.LpProblem(f"DataCenter_{target_spec_name}", pulp.LpMaximize) # Use spec name in problem name
@@ -182,56 +256,55 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
 
     # --- 5. Solve the Problem ---
     print(f"Solving the MILP problem for {target_spec_name}...")
-    solver = pulp.PULP_CBC_CMD(msg=0)
+    solver = pulp.PULP_CBC_CMD(msg=0) # Suppress solver messages
     prob.solve(solver)
     print("-" * 30)
 
-    # --- 6. Process and Print Results ---
-    print(f"\n--- Optimization Results for {target_spec_name} ---")
+    # --- 6. Process Results ---
+    # print(f"\n--- Optimization Results for {target_spec_name} ---") # Moved printing outside
     status = pulp.LpStatus[prob.status]
-    print(f"Status: {status}")
+    # print(f"Status: {status}") # Moved printing outside
+    results["status"] = status
 
-    # *** Check Objective Value Before Formatting ***
     objective_value = pulp.value(prob.objective)
-    if objective_value is not None:
-        print(f"Optimal Objective Value = {objective_value:.4f}")
-    else:
-        print("Optimal Objective Value = None (Objective might be empty or solver issue)")
+    results["objective_value"] = objective_value
+    # if objective_value is not None:
+    #     print(f"Optimal Objective Value = {objective_value:.4f}") # Moved printing outside
+    # else:
+    #     print("Optimal Objective Value = None (Objective might be empty or solver issue)") # Moved printing outside
 
 
     if prob.status == pulp.LpStatusOptimal:
-        # (Rest of the result processing logic remains the same)
-        print("\nSelected Modules:")
-        selected_modules = []
+        # print("\nSelected Modules:") # Moved printing outside
+        selected_modules_list = []
         total_inputs = {}
         total_outputs = {}
         all_units_in_solution = set()
 
         for mod_id in module_ids:
             count = module_vars[mod_id].varValue
-            if count is not None and count > 1e-6:
+            if count is not None and count > 1e-6: # Use a small tolerance
                 int_count = int(round(count))
                 if int_count > 0:
                     mod_info = module_data[mod_id]
-                    print(f"  - {mod_info['name']} (ID: {mod_id}): {int_count}")
-                    selected_modules.append({'id': mod_id, 'count': int_count, 'info': mod_info})
+                    # print(f"  - {mod_info['name']} (ID: {mod_id}): {int_count}") # Moved printing outside
+                    selected_modules_list.append({'id': mod_id, 'name': mod_info['name'], 'count': int_count}) # Store name too
 
-        if not selected_modules:
-             print("  (No modules selected - optimal solution might be zero for all)")
+                    # Accumulate resources
+                    for unit, amount in mod_info['inputs'].items():
+                        total_inputs[unit] = total_inputs.get(unit, 0) + amount * int_count
+                        all_units_in_solution.add(unit)
+                    for unit, amount in mod_info['outputs'].items():
+                        total_outputs[unit] = total_outputs.get(unit, 0) + amount * int_count
+                        all_units_in_solution.add(unit)
 
-        # --- Calculate and Print Resource Totals ---
-        print("\nResulting Resource Summary:")
-        for selection in selected_modules:
-            mod_id = selection['id']
-            count = selection['count']
-            mod_info = selection['info']
-            for unit, amount in mod_info['inputs'].items():
-                total_inputs[unit] = total_inputs.get(unit, 0) + amount * count
-                all_units_in_solution.add(unit)
-            for unit, amount in mod_info['outputs'].items():
-                total_outputs[unit] = total_outputs.get(unit, 0) + amount * count
-                all_units_in_solution.add(unit)
+        results["selected_modules"] = selected_modules_list
+        # if not selected_modules_list:
+        #      print("  (No modules selected - optimal solution might be zero for all)") # Moved printing outside
 
+        # --- Calculate Resource Totals ---
+        # print("\nResulting Resource Summary:") # Moved printing outside
+        resource_summary_dict = {}
         spec_units = set(target_spec_df['Unit'].dropna())
         relevant_units = sorted(list(all_units_in_solution | spec_units))
 
@@ -239,10 +312,13 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
             inp = total_inputs.get(unit, 0)
             outp = total_outputs.get(unit, 0)
             net = outp - inp
-            print(f"  - {unit:<20}: Input={inp:10.2f}, Output={outp:10.2f}, Net={net:10.2f}")
+            resource_summary_dict[unit] = {"input": inp, "output": outp, "net": net}
+            # print(f"  - {unit:<20}: Input={inp:10.2f}, Output={outp:10.2f}, Net={net:10.2f}") # Moved printing outside
+        results["resource_summary"] = resource_summary_dict
 
         # --- Verify Constraints ---
-        print("\nConstraint Verification:")
+        # print("\nConstraint Verification:") # Moved printing outside
+        constraint_verification_list = []
         for _, row in target_spec_df.iterrows():
             unit = row['Unit']
             limit = row['Amount']
@@ -252,29 +328,55 @@ def solve_datacenter_config(module_data, target_spec_df, module_ids, target_spec
                 actual_input = total_inputs.get(unit, 0)
                 status_ok = actual_input <= limit + 1e-6 # Tolerance for float comparison
                 status_str = "OK" if status_ok else "VIOLATED"
-                print(f"  - Below Input  {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({status_str})")
+                verification_str = f"Below Input  {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({status_str})"
+                constraint_verification_list.append(verification_str)
+                # print(f"  - {verification_str}") # Moved printing outside
 
             if row['Above_Amount'] == 1 and pd.notna(limit):
                 actual_output = total_outputs.get(unit, 0)
                 status_ok = actual_output >= limit - 1e-6 # Tolerance for float comparison
                 status_str = "OK" if status_ok else "VIOLATED"
-                print(f"  - Above Output {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({status_str})")
+                verification_str = f"Above Output {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({status_str})"
+                constraint_verification_list.append(verification_str)
+                # print(f"  - {verification_str}") # Moved printing outside
+        results["constraint_verification"] = constraint_verification_list
+
+    # elif status == 'Infeasible':
+    #     print("The problem is infeasible. No combination of modules can satisfy all constraints.") # Moved printing outside
+    # elif status == 'Unbounded':
+    #     print("The problem is unbounded. The objective can be increased indefinitely (check constraints and objective function).") # Moved printing outside
+    # else:
+    #     print("Solver finished with a non-optimal status.") # Moved printing outside
+
+    # Add empty lines for separation - handled by the caller now
+    # print("\n\n")
+    return results
 
 
-    elif status == 'Infeasible':
-        print("The problem is infeasible. No combination of modules can satisfy all constraints.")
-    elif status == 'Unbounded':
-        print("The problem is unbounded. The objective can be increased indefinitely (check constraints and objective function).")
-    else:
-        print("Solver finished with a non-optimal status.")
+# --- Encapsulating Function ---
+def run_datacenter_optimization(modules_path, spec_path):
+    """
+    Orchestrates the datacenter optimization process.
 
-    # Add empty lines for separation
-    print("\n\n") # Add a couple of empty lines after processing each spec
+    Loads data using load_data(), iterates through each unique specification found,
+    calls solve_datacenter_config() for each, and collects the results.
 
-# --- Main Execution Block ---
-if __name__ == "__main__":
+    Args:
+        modules_path (str): Path to the Modules CSV file.
+        spec_path (str): Path to the Data Center Specification CSV file.
+
+    Returns:
+        list: A list of dictionaries, where each dictionary is the result
+              returned by solve_datacenter_config() for a specific specification.
+              Returns None if data loading fails.
+    """
+    all_results = []
+
     # 1. Load Data (including all specs and unique names)
-    module_data, all_specs_df, module_ids, unique_spec_names = load_data(MODULES_CSV_PATH, SPEC_CSV_PATH)
+    try:
+        module_data, all_specs_df, module_ids, unique_spec_names = load_data(modules_path, spec_path)
+    except SystemExit: # Catch exit from load_data on error
+        return None # Indicate failure
 
     # 2. Iterate through each specification and solve
     for spec_name in unique_spec_names:
@@ -283,10 +385,85 @@ if __name__ == "__main__":
 
         if current_spec_df.empty:
             print(f"\nWarning: No valid rules found for specification '{spec_name}'. Skipping.")
+            # Optionally add a result indicating skipped status
+            all_results.append({
+                "spec_name": spec_name,
+                "status": "Skipped - No Rules",
+                "objective_value": None, "selected_modules": [], "resource_summary": {}, "constraint_verification": []
+            })
             continue
 
         # Solve the problem for the current specification
-        solve_datacenter_config(module_data, current_spec_df, module_ids, spec_name)
+        spec_result = solve_datacenter_config(module_data, current_spec_df, module_ids, spec_name)
+        all_results.append(spec_result)
+
+    return all_results
+
+
+
+# --- Main Execution Block ---
+if __name__ == "__main__":
+    print("--- Starting Datacenter Optimization Script ---")
+
+    # Run the optimization for all specs
+    optimization_results = run_datacenter_optimization(MODULES_CSV_PATH, SPEC_CSV_PATH)
+
+    # Check if optimization ran successfully
+    if optimization_results is None:
+        print("\n--- Script Exited Due to Data Loading Errors ---")
+        sys.exit(1) # Exit if loading failed
+
+    print("\n\n--- Final Optimization Results ---")
+
+    # Print the results for each specification
+    for result in optimization_results:
+        print(f"\n========== Results for Specification: {result['spec_name']} ==========")
+        print(f"Status: {result['status']}")
+
+        if result['objective_value'] is not None:
+            print(f"Optimal Objective Value = {result['objective_value']:.4f}")
+        else:
+             # Provide more context based on status
+            if result['status'] not in ["Optimal", "Not Solved", "Skipped - No Rules"]:
+                 print(f"Objective Value: N/A ({result['status']})")
+            else:
+                 print("Optimal Objective Value = None (Objective might be empty or solver issue)")
+
+
+        if result['status'] == 'Optimal':
+            print("\nSelected Modules:")
+            if result['selected_modules']:
+                for mod in result['selected_modules']:
+                    print(f"  - {mod['name']} (ID: {mod['id']}): {mod['count']}")
+            else:
+                print("  (No modules selected - optimal solution might be zero for all)")
+
+            print("\nResulting Resource Summary:")
+            if result['resource_summary']:
+                # Sort units for consistent output
+                for unit in sorted(result['resource_summary'].keys()):
+                    res = result['resource_summary'][unit]
+                    print(f"  - {unit:<20}: Input={res['input']:10.2f}, Output={res['output']:10.2f}, Net={res['net']:10.2f}")
+            else:
+                print("  (No resources used or generated)")
+
+
+            print("\nConstraint Verification:")
+            if result['constraint_verification']:
+                for line in result['constraint_verification']:
+                    print(f"  - {line}")
+            else:
+                print("  (No constraints to verify or none were active)")
+
+        elif result['status'] == 'Infeasible':
+            print("\nDetails: The problem is infeasible. No combination of modules can satisfy all constraints.")
+        elif result['status'] == 'Unbounded':
+            print("\nDetails: The problem is unbounded. The objective can be increased indefinitely (check constraints and objective function).")
+        elif result['status'] == 'Skipped - No Rules':
+            print("\nDetails: This specification was skipped because no valid rules were found in the input file.")
+        # Add other statuses if needed
+
+        print("=" * (len(result['spec_name']) + 34)) # Footer line matching header width
 
     print("\n--- All Specifications Processed ---")
     print("\n--- Script Finished ---")
