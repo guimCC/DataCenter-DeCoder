@@ -104,6 +104,13 @@ async def solve(specs, weights):
     return solve_module_placement(modules, specs, weights, module_list)
 
 
+# POST: get layout components list
+@app.post
+async def get_layout_components_list(specs, weights):
+    modules = get_modules()
+    return solve_module_list(modules, specs, weights)
+
+
 
 # DELETE: delete a module
 @app.delete("/modules/{module_id}")

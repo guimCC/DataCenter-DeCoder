@@ -253,13 +253,21 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
         is_above = rule['Above_Amount'] == 1
         is_unconstrained = rule['Unconstrained'] == 1
 
-        if unit is None or unit in DIMENSION_RESOURCES or is_unconstrained: continue
-        if (is_below or is_above) and (limit is None or math.isnan(limit)):
+        # Skip rules that are not Below/Above constraints or are for dimensions/unconstrained
+        if unit is None or unit in DIMENSION_RESOURCES or is_unconstrained:
+            continue
+        if not is_below and not is_above: # Skip if it's not a limit constraint (e.g., objective rule)
+             continue
+
+        # Check for missing/invalid limit *only* for Below/Above constraints
+        if limit is None or (isinstance(limit, float) and math.isnan(limit)):
             print(f"Warning: Skipping constraint for '{unit}' due to missing/invalid limit amount.")
             continue
 
-        limit_float = float(limit) # Use float for comparison
+        # --- Convert limit to float only now that we know it's needed and valid ---
+        limit_float = float(limit)
 
+        # --- Define expressions (consider moving this down if computationally heavy) ---
         input_expr = pulp.lpSum(
             float(module_data[mod_id]['inputs'].get(unit, 0)) * module_counts[mod_id]
             for mod_id in module_ids if mod_id in module_counts
@@ -271,12 +279,13 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
 
         constraint_added_for_unit = False
         constraint_str = ""
+        # --- Apply constraints using limit_float ---
         if unit in INPUT_RESOURCES:
             if is_below:
                 prob += input_expr <= limit_float, f"InputLimit_Below_{unit}"
                 constraint_str = f"INPUT (Below): {unit} <= {limit_float}"
                 constraint_added_for_unit = True
-            elif is_above:
+            elif is_above: # 'elif' is fine since is_below and is_above shouldn't both be true for the same rule
                 prob += input_expr >= limit_float, f"InputLimit_Above_{unit}"
                 constraint_str = f"INPUT (Above): {unit} >= {limit_float}"
                 constraint_added_for_unit = True
@@ -290,8 +299,8 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
                 constraint_str = f"OUTPUT (Above): {unit} >= {limit_float}"
                 constraint_added_for_unit = True
         elif unit in INTERNAL_RESOURCES:
-             if is_below or is_above:
-                 print(f"Warning: Ignoring Below/Above constraint for internal resource '{unit}'.")
+             # Below/Above constraints are currently ignored for internal resources
+             print(f"Warning: Ignoring Below/Above constraint for internal resource '{unit}'.")
         else: # Unknown resource type
             print(f"Warning: Applying spec constraint to unknown resource type '{unit}'.")
             if is_below:
