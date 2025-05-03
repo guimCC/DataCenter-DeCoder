@@ -37,7 +37,6 @@ OBJECTIVE_WEIGHTS = {
     'total_area': 0.1 # Weight for area minimization if active
     # Add other units and their weights here if needed
 }
-print(f"--- Using Objective Weights: {OBJECTIVE_WEIGHTS} (Default: 1.0) ---")
 
 
 # Define Resource Categories
@@ -119,7 +118,6 @@ def load_data(modules_path, spec_path):
                  mod_area = 0
             else:
                  mod_area = mod_width * mod_height
-                 # print(f"  - Module ID {mod_id} ({module_names.get(mod_id)}): W={mod_width}, H={mod_height}, Area={mod_area}") # Verbose
 
         except (ValueError, TypeError):
              print(f"  - Warning: Module ID {mod_id} ({module_names.get(mod_id)}) has invalid dimension values "
@@ -140,7 +138,6 @@ def load_data(modules_path, spec_path):
             "height": mod_height, # Keep for info if needed
             "area": mod_area
         }
-    print("-" * 30)
 
 
     # --- Process Spec Data ---
@@ -170,11 +167,9 @@ def load_data(modules_path, spec_path):
              specs_df[col] = specs_df[col].fillna(0).astype(int)
 
 
-    print(f"--- Loaded Data ---")
-    print(f"Found {len(module_data)} module types.")
-    print(f"Found {len(specs_df)} total spec rules across {len(unique_spec_names)} specifications.")
-    print(f"Specifications to solve: {', '.join(unique_spec_names)}")
-    print("-" * 30)
+    print(f"\n--- Loaded Data ---")
+    print(f"- {len(module_data)} module types.")
+    print(f"- {len(unique_spec_names)} specifications found: {', '.join(unique_spec_names)}")
 
     return module_data, specs_df, module_ids, unique_spec_names
 
@@ -213,7 +208,6 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
             print("Area Minimization Detected: Treating total area as part of the objective.")
     if not minimize_area:
         print(f"Area Constraint Active: Total Available Area Limit = {total_area_limit}")
-    print("-" * 30)
 
 
     # --- Create PuLP Problem ---
@@ -225,11 +219,9 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
     module_counts = pulp.LpVariable.dicts(
         "Count", module_ids, lowBound=0, cat='Integer'
     )
-    print(f"Created {len(module_counts)} module count variables.")
-    print("-" * 30)
 
     # --- Define Objective Function (respecting resource types) ---
-    print("Building Objective (respecting resource types):")
+    print("Building Objective Function:")
     objective_expr = pulp.LpAffineExpression() # Start with an empty expression
     objective_terms_added = 0
     maximized_units = []
@@ -273,7 +265,6 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
         if base_sign != 0:
             relative_weight = OBJECTIVE_WEIGHTS.get(unit, 1.0) # Default to 1.0 if not specified
             weight = base_sign * relative_weight
-            print(f"  - Objective term for '{unit}': BaseSign={base_sign}, RelativeWeight={relative_weight} -> FinalWeight={weight}")
 
 
         if weight != 0:
@@ -285,15 +276,16 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
                 for mod_id in module_ids if mod_id in module_counts # Ensure var exists
             )
 
-            # Check if the expression is non-trivial before adding
-            if not (isinstance(unit_net_contrib_expr, (int, float)) and unit_net_contrib_expr == 0):
-                 # Apply the final calculated weight
-                 objective_expr += weight * unit_net_contrib_expr
-                 objective_terms_added += 1
-                 if weight > 0: maximized_units.append(f"{unit} (W={weight:.2f})")
-                 elif weight < 0: minimized_units.append(f"{unit} (W={weight:.2f})")
-            # else:
-            #      print(f"  - Skipping trivial objective term for unit '{unit}'.")
+            # Add term to objective - PuLP handles zero expressions gracefully
+            objective_expr += weight * unit_net_contrib_expr
+            objective_terms_added += 1
+            term_desc = f"{unit} (W={weight:.2f})"
+            if weight > 0:
+                maximized_units.append(term_desc)
+            elif weight < 0:
+                minimized_units.append(term_desc)
+            print(f"  - Adding Objective Term: {term_desc}")
+
 
     # --- Add Area to Objective if Minimizing Area ---
     # Calculate area expression regardless (needed for constraint or objective)
@@ -304,55 +296,38 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
     )
 
     if minimize_area:
-        if not (isinstance(area_expr, (int, float)) and area_expr == 0):
-            # Get relative weight for area, default to 1.0
-            relative_area_weight = OBJECTIVE_WEIGHTS.get('total_area', 1.0)
-            # Final weight is negative because we minimize area (in a maximization problem)
-            final_area_weight = -1.0 * relative_area_weight
-            print(f"  - Objective term for 'Total Area': RelativeWeight={relative_area_weight} -> FinalWeight={final_area_weight}")
-            objective_expr += final_area_weight * area_expr
-            objective_terms_added += 1
-            minimized_units.append(f"total_area (W={final_area_weight:.2f})") # Add to list for clarity
-        else:
-            print("  - Info: No modules have positive area, skipping area minimization objective term.")
+        # Get relative weight for area, default to 1.0
+        relative_area_weight = OBJECTIVE_WEIGHTS.get('total_area', 1.0)
+        # Final weight is negative because we minimize area (in a maximization problem)
+        final_area_weight = -1.0 * relative_area_weight
+        objective_expr += final_area_weight * area_expr
+        objective_terms_added += 1
+        term_desc = f"total_area (W={final_area_weight:.2f})"
+        minimized_units.append(term_desc) # Add to list for clarity
+        print(f"  - Adding Objective Term: {term_desc}")
 
-
-    # Print the final objective details
-    # print(f"\nObjective Function Expression: {objective_expr}") # Can become very long
-    if maximized_units:
-        print(f"Units being Maximized (Positive Final Weight): {', '.join(maximized_units)}")
-    if minimized_units:
-        print(f"Units being Minimized (Negative Final Weight): {', '.join(minimized_units)}")
 
     if objective_terms_added == 0:
         print("  - Warning: No valid terms added to the objective function! Setting dummy objective (maximize 0).")
         prob += 0 # Define a dummy objective
     else:
         prob += objective_expr # Add the combined objective expression
-
-    print("-" * 30)
+        if maximized_units: print(f"  - Maximizing: {', '.join(maximized_units)}")
+        if minimized_units: print(f"  - Minimizing: {', '.join(minimized_units)}")
 
 
     # --- Define Constraints ---
 
     # 1. Total Area Constraint (ONLY if not minimizing area)
-    print("Handling Area Constraint/Objective:")
+    print("Building Constraints:")
     if not minimize_area:
         if total_area_limit > 0:
-            if not (isinstance(area_expr, (int, float)) and area_expr == 0): # Only add if non-trivial
-                prob += area_expr <= total_area_limit, "TotalAreaConstraint"
-                print(f"  - Constraint Added: Total Area <= {total_area_limit}")
-            else:
-                print("  - Info: No modules have positive area, skipping area constraint.")
-        else:
-             print(f"  - Info: Total area limit is {total_area_limit}, skipping area constraint.")
-    else:
-        print("  - Info: Area is part of the objective function, no upper bound constraint applied.")
-    print("-" * 30)
+            # Add constraint - PuLP handles zero expressions gracefully
+            prob += area_expr <= total_area_limit, "TotalAreaConstraint"
+            print(f"  - Constraint Added: Total Area <= {total_area_limit}")
 
 
     # 2. Resource Constraints from Spec (respecting resource types)
-    print("Adding Resource Constraints from Spec (respecting resource types):")
     constraints_added = 0
     for _, row in target_spec_df.iterrows():
         unit = row['Unit']
@@ -364,11 +339,18 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
         # Skip dimensions (handled above), unconstrained, or invalid rows
         if unit is None or unit in DIMENSION_RESOURCES: continue
         if is_unconstrained:
-            print(f"  - Info: Resource '{unit}' is marked as unconstrained.")
             continue
         if pd.isna(limit) and (is_below or is_above):
             print(f"  - Warning: Skipping constraint for '{unit}' due to missing limit amount.")
             continue
+
+        # Ensure limit is integer for comparison/constraint RHS
+        try:
+            limit_int = int(limit)
+        except (ValueError, TypeError):
+             print(f"  - Warning: Skipping constraint for '{unit}' due to non-integer limit amount '{limit}'.")
+             continue
+
 
         # Calculate total input and output expressions for the unit
         input_expr = pulp.lpSum(
@@ -382,23 +364,28 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
 
         # Apply constraints based on resource type
         constraint_added_for_unit = False
+        constraint_str = ""
         if unit in INPUT_RESOURCES:
-            if is_above:
-                print(f"  - Warning: Cannot apply 'Above_Amount' constraint to input resource '{unit}'. Ignoring.")
-            elif is_below:
-                if not (isinstance(input_expr, (int, float)) and input_expr == 0): # Add if non-trivial
-                    prob += input_expr <= int(limit), f"InputLimit_{unit}"
-                    print(f"  - INPUT Constraint: {unit} <= {int(limit)}")
-                    constraint_added_for_unit = True
+            # Allow both Below and Above constraints for Input resources
+            if is_below:
+                prob += input_expr <= limit_int, f"InputLimit_Below_{unit}"
+                constraint_str = f"INPUT (Below): {unit} <= {limit_int}"
+                constraint_added_for_unit = True
+            elif is_above:
+                prob += input_expr >= limit_int, f"InputLimit_Above_{unit}"
+                constraint_str = f"INPUT (Above): {unit} >= {limit_int}"
+                constraint_added_for_unit = True
 
         elif unit in OUTPUT_RESOURCES:
+            # Allow both Below and Above constraints for Output resources
             if is_below:
-                print(f"  - Warning: Cannot apply 'Below_Amount' constraint to output resource '{unit}'. Ignoring.")
+                prob += output_expr <= limit_int, f"OutputReq_Below_{unit}"
+                constraint_str = f"OUTPUT (Below): {unit} <= {limit_int}"
+                constraint_added_for_unit = True
             elif is_above:
-                 if not (isinstance(output_expr, (int, float)) and output_expr == 0): # Add if non-trivial
-                    prob += output_expr >= int(limit), f"OutputReq_{unit}"
-                    print(f"  - OUTPUT Constraint: {unit} >= {int(limit)}")
-                    constraint_added_for_unit = True
+                prob += output_expr >= limit_int, f"OutputReq_Above_{unit}"
+                constraint_str = f"OUTPUT (Above): {unit} >= {limit_int}"
+                constraint_added_for_unit = True
 
         elif unit in INTERNAL_RESOURCES:
             if is_below or is_above:
@@ -407,24 +394,20 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
         else: # Unknown resource type - apply constraints as specified but warn
             print(f"  - Warning: Applying spec constraint to unknown resource type '{unit}'.")
             if is_below:
-                if not (isinstance(input_expr, (int, float)) and input_expr == 0):
-                    prob += input_expr <= int(limit), f"UnknownInputLimit_{unit}"
-                    print(f"  - UNKNOWN TYPE Input Constraint: {unit} <= {int(limit)}")
-                    constraint_added_for_unit = True
+                prob += input_expr <= limit_int, f"UnknownLimit_Below_{unit}"
+                constraint_str = f"UNKNOWN (Below): {unit} <= {limit_int}"
+                constraint_added_for_unit = True
             elif is_above:
-                 if not (isinstance(output_expr, (int, float)) and output_expr == 0):
-                    prob += output_expr >= int(limit), f"UnknownOutputReq_{unit}"
-                    print(f"  - UNKNOWN TYPE Output Constraint: {unit} >= {int(limit)}")
-                    constraint_added_for_unit = True
+                prob += output_expr >= limit_int, f"UnknownReq_Above_{unit}"
+                constraint_str = f"UNKNOWN (Above): {unit} >= {limit_int}"
+                constraint_added_for_unit = True
 
         if constraint_added_for_unit:
             constraints_added += 1
-
-    print("-" * 30)
+            print(f"  - Constraint Added: {constraint_str}")
 
 
     # 3. Implicit Constraints for Internal Resources (Net >= 0)
-    print("Adding Implicit Constraints for Internal Resources (Net >= 0):")
     internal_constraints_added = 0
     all_defined_units = set()
     for mod_id in module_ids:
@@ -439,30 +422,25 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
                 * module_counts[mod_id]
                 for mod_id in module_ids if mod_id in module_counts
             )
-            # Add constraint only if it's potentially non-zero
-            if not (isinstance(net_expr, (int, float)) and net_expr == 0):
-                prob += net_expr >= 0, f"InternalNet_{unit}"
-                print(f"  - INTERNAL Constraint: Net {unit} >= 0")
-                internal_constraints_added += 1
-        # else:
-        #     print(f"  - Info: Internal resource '{unit}' not used by any module, skipping Net >= 0 constraint.")
+            # Add constraint - PuLP handles zero expressions gracefully
+            prob += net_expr >= 0, f"InternalNet_{unit}"
+            print(f"  - Constraint Added: INTERNAL Net {unit} >= 0")
+            internal_constraints_added += 1
 
 
     # Check if any constraints were added at all (excluding internal >= 0)
-    area_constraint_active = (not minimize_area and total_area_limit > 0 and not (isinstance(area_expr, (int, float)) and area_expr == 0))
-    if constraints_added == 0 and not area_constraint_active:
-         print("\n  - Warning: No resource constraints or area constraint were added! Check spec file. Only internal resource balance (>=0) might apply.")
-    print("-" * 30)
+    area_constraint_active = (not minimize_area and total_area_limit > 0) # Simplified check
+    if constraints_added == 0 and not area_constraint_active and internal_constraints_added == 0:
+         print("\n  - Warning: No constraints were added! Check spec file.")
 
 
     # --- Solve the Problem ---
-    print(f"Solving the MIP problem for {target_spec_name} (Time Limit: {SOLVER_TIME_LIMIT_SECONDS}s)...")
+    print(f"\nSolving the MIP problem for {target_spec_name} (Time Limit: {SOLVER_TIME_LIMIT_SECONDS}s)...")
     # Use default CBC solver, suppress excessive messages, set time limit
     solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=SOLVER_TIME_LIMIT_SECONDS)
     prob.solve(solver)
     solve_time = time.time() - start_time
     print(f"Solve Time: {solve_time:.2f} seconds")
-    print("-" * 30)
 
     # --- Process Results ---
     status_name = pulp.LpStatus[prob.status]
@@ -478,7 +456,7 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
         "area_minimized": minimize_area # Store how area was handled
     }
 
-    if prob.status == pulp.LpStatusOptimal or prob.status == pulp.LpStatusFeasible:
+    if prob.status == pulp.LpStatusOptimal:
         results["objective_value"] = pulp.value(prob.objective)
         selected_counts = {}
         total_inputs = {}
@@ -530,13 +508,13 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
         if not minimize_area and total_area_limit > 0:
             area_ok = total_area_used_calc <= total_area_limit + tolerance
             area_status = "OK" if area_ok else "VIOLATED"
-            verification_str = f"Area Constraint {'Total Area':<15}: Actual={total_area_used_calc:10.2f} <= Limit={total_area_limit:10.2f} ({area_status})"
+            verification_str = f"Area Constraint : Actual={total_area_used_calc:10.2f} <= Limit={total_area_limit:10.2f} ({area_status})"
             constraint_verification_list.append(verification_str)
         elif minimize_area:
-            verification_str = f"Area Objective  {'Total Area':<15}: Actual={total_area_used_calc:10.2f} (Minimized in Objective)"
+            verification_str = f"Area Objective  : Actual={total_area_used_calc:10.2f} (Minimized in Objective)"
             constraint_verification_list.append(verification_str)
         else: # No area constraint applied
-             verification_str = f"Area Info       {'Total Area':<15}: Actual={total_area_used_calc:10.2f} (No Constraint Applied)"
+             verification_str = f"Area Info       : Actual={total_area_used_calc:10.2f} (No Constraint Applied)"
              constraint_verification_list.append(verification_str)
 
 
@@ -552,6 +530,12 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
             if unit is None or unit in DIMENSION_RESOURCES or is_unconstrained: continue
             if pd.isna(limit) and (is_below or is_above): continue # Skip invalid
 
+            # Ensure limit is numeric for comparison
+            try:
+                limit_float = float(limit)
+            except (ValueError, TypeError):
+                 continue # Skip if limit wasn't valid earlier
+
             actual_input = total_inputs.get(unit, 0)
             actual_output = total_outputs.get(unit, 0)
             status_ok = True
@@ -559,18 +543,24 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
             verification_str = ""
 
             if unit in INPUT_RESOURCES:
-                if is_above: continue # Ignore invalid spec constraint
                 if is_below:
-                    status_ok = actual_input <= limit + tolerance
+                    status_ok = actual_input <= limit_float + tolerance
                     violation_type = "Below Input"
-                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit_float:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                elif is_above: # Now check Above for Inputs
+                    status_ok = actual_input >= limit_float - tolerance
+                    violation_type = "Above Input"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_input:10.2f} >= Limit={limit_float:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
 
             elif unit in OUTPUT_RESOURCES:
-                if is_below: continue # Ignore invalid spec constraint
-                if is_above:
-                    status_ok = actual_output >= limit - tolerance
+                if is_below: # Now check Below for Outputs
+                    status_ok = actual_output <= limit_float + tolerance
+                    violation_type = "Below Output"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_output:10.2f} <= Limit={limit_float:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                elif is_above:
+                    status_ok = actual_output >= limit_float - tolerance
                     violation_type = "Above Output"
-                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit_float:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
 
             elif unit in INTERNAL_RESOURCES:
                  # Spec constraints are ignored, only implicit >= 0 matters (verified next)
@@ -578,13 +568,15 @@ def solve_resource_optimization_no_placement(module_data, target_spec_df, module
 
             else: # Unknown resource type - verify as specified
                  if is_below:
-                    status_ok = actual_input <= limit + tolerance
+                    # Assuming Below applies to the 'input-like' aspect
+                    status_ok = actual_input <= limit_float + tolerance
                     violation_type = "Below Input (UNK)"
-                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_input:10.2f} <= Limit={limit_float:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
                  elif is_above:
-                    status_ok = actual_output >= limit - tolerance
+                    # Assuming Above applies to the 'output-like' aspect
+                    status_ok = actual_output >= limit_float - tolerance
                     violation_type = "Above Output (UNK)"
-                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
+                    verification_str = f"{violation_type:<15} {unit:<15}: Actual={actual_output:10.2f} >= Limit={limit_float:10.2f} ({'OK' if status_ok else 'VIOLATED'})"
 
             if verification_str: # Add if a check was performed
                 constraint_verification_list.append(verification_str)
@@ -661,10 +653,6 @@ def run_datacenter_resource_optimization(modules_path, spec_path):
                 else:
                     print(f"\nWarning: Non-positive dimensions found in Space_X/Y Below_Amount constraints "
                           f"for specification '{spec_name}'. Area limit set to 0 (no constraint).")
-            # else: # Don't warn if missing, it just means no limit is specified this way
-            #     print(f"\nInfo: Missing Space_X or Space_Y Below_Amount constraint for spec '{spec_name}'. "
-            #           f"No area limit constraint will be applied unless area minimization is active.")
-            #     pass
 
 
         except (ValueError, TypeError, IndexError) as e:
@@ -685,39 +673,55 @@ def run_datacenter_resource_optimization(modules_path, spec_path):
     return all_results
 
 
-# --- Main Execution Block ---
-if __name__ == "__main__":
+# --- Main Execution and Printing Function ---
+def run_optimization_and_print_results(modules_path, spec_path):
+    """
+    Runs the complete optimization process and prints the results.
+
+    Args:
+        modules_path (str): Path to the Modules CSV file.
+        spec_path (str): Path to the Data Center Specification CSV file.
+
+    Returns:
+        list or None: A list of result dictionaries for each specification,
+                      or None if the initial data loading failed.
+    """
     print("--- Starting Datacenter Resource Optimization Script (PuLP - No Placement) ---")
-    print(f"--- Using Objective Weights: {OBJECTIVE_WEIGHTS} (Default: 1.0) ---") # Repeat for clarity
+    print(f"--- Using Objective Weights: {OBJECTIVE_WEIGHTS} (Default: 1.0) ---")
 
     # Pre-load module data for final printing names, handle potential errors
     module_data_for_print = {}
     try:
         # Use a separate call or ensure load_data is robust
-        temp_module_data, _, _, _ = load_data(MODULES_CSV_PATH, SPEC_CSV_PATH)
+        # Note: load_data prints its own messages
+        temp_module_data, _, _, _ = load_data(modules_path, spec_path)
         module_data_for_print = temp_module_data
     except SystemExit:
         print("\n--- Script Exited Due to Initial Data Loading Errors ---")
-        sys.exit(1)
+        return None # Indicate failure
     except Exception as e:
         print(f"\n--- Unexpected error during initial data load for printing names: {e} ---")
-        # Decide if continuing without names is acceptable
+        # Decide if continuing without names is acceptable, returning None for now
+        return None # Indicate failure
 
     optimization_results = run_datacenter_resource_optimization(
-        MODULES_CSV_PATH, SPEC_CSV_PATH
+        modules_path, spec_path
     )
 
     if optimization_results is None:
-        # Error message already printed
+        # Error message already printed by run_datacenter_resource_optimization or load_data
         print("\n--- Optimization run failed or was skipped. ---")
-        sys.exit(1)
+        return None # Indicate failure
 
+    print()
+    print()
     print("\n\n--- Final Resource Optimization Results (No Placement) ---")
 
     # Print results for each spec
     for result in optimization_results:
         print(f"\n========== Results for Specification: {result['spec_name']} ==========")
-        solve_time_str = f"{result.get('solve_time_seconds', 'N/A'):.2f}s" if isinstance(result.get('solve_time_seconds'), (int, float)) else 'N/A'
+        solve_time = result.get('solve_time_seconds')
+        solve_time_str = f"{solve_time:.2f}s" if isinstance(solve_time, (int, float)) else 'N/A'
         print(f"Status: {result['status']} (Solve Time: {solve_time_str})")
         if result.get("area_minimized"):
             print("Area Handling: Minimized in Objective")
@@ -727,21 +731,18 @@ if __name__ == "__main__":
 
         if result['status'] in ["Optimal", "Feasible"]: # PuLP status names
             obj_val = result.get('objective_value')
-            if obj_val is not None:
-                 print(f"Objective Value = {obj_val:.4f}")
-            else:
-                 print("Objective Value = N/A")
+            print(f"Objective Value = {obj_val:.4f}" if obj_val is not None else "Objective Value = N/A")
 
             # Print Objective Components
-            max_units = result.get('maximized_units', [])
-            min_units = result.get('minimized_units', [])
+            # Note: Objective units are now stored directly in the result dict by solve function
+            max_units = [t for t in result.get('maximized_units', [])] # Get from results if available
+            min_units = [t for t in result.get('minimized_units', [])] # Get from results if available
+
             if max_units:
-                # Print units with their final weights
                 print(f"Objective Maximized: {', '.join(max_units)}")
             if min_units:
-                # Print units with their final weights
                 print(f"Objective Minimized: {', '.join(min_units)}")
-            if not max_units and not min_units:
+            if not max_units and not min_units and result['status'] != 'Infeasible':
                 print("Objective: Default (Feasibility or Maximize 0)")
 
             print("\nSelected Modules (Count):")
@@ -749,25 +750,27 @@ if __name__ == "__main__":
                 sorted_mod_ids = sorted(result['selected_modules_counts'].keys())
                 for mod_id in sorted_mod_ids:
                     count = result['selected_modules_counts'][mod_id]
+                    # Use pre-loaded data for names
                     mod_name = module_data_for_print.get(mod_id, {}).get('name', f"Unknown_ID_{mod_id}")
                     print(f"  - {mod_name} (ID: {mod_id}): {count}")
             else:
                 print("  (No modules selected)")
 
             # Always print total area used
-            area_used_str = f"{result.get('total_area_used', 'N/A'):.2f}" if isinstance(result.get('total_area_used'), (int, float)) else 'N/A'
-            print(f"\nTotal Area Used: {area_used_str}")
+            area_used = result.get('total_area_used')
+            print(f"\nTotal Area Used: {area_used:.2f}" if isinstance(area_used, (int, float)) else "\nTotal Area Used: N/A")
 
             print("\nResulting Resource Summary (Excluding Dimensions):")
             if result.get('resource_summary'):
                 # Sort by unit name for consistent output
                 for unit in sorted(result['resource_summary'].keys()):
-                    # Skip dimension resources in summary (already handled)
-                    # if unit in DIMENSION_RESOURCES: continue # Already skipped during creation
                     res = result['resource_summary'][unit]
-                    input_str = f"{res['input']:.2f}" if isinstance(res['input'], (int, float)) else 'N/A'
-                    output_str = f"{res['output']:.2f}" if isinstance(res['output'], (int, float)) else 'N/A'
-                    net_str = f"{res['net']:.2f}" if isinstance(res['net'], (int, float)) else 'N/A'
+                    inp = res.get('input')
+                    outp = res.get('output')
+                    net = res.get('net')
+                    input_str = f"{inp:.2f}" if isinstance(inp, (int, float)) else 'N/A'
+                    output_str = f"{outp:.2f}" if isinstance(outp, (int, float)) else 'N/A'
+                    net_str = f"{net:.2f}" if isinstance(net, (int, float)) else 'N/A'
                     print(f"  - {unit:<20}: Input={input_str:>10}, Output={output_str:>10}, Net={net_str:>10}")
             else:
                 print("  (Resource summary not calculated)")
@@ -781,7 +784,6 @@ if __name__ == "__main__":
 
         elif result['status'] == 'Infeasible':
             print("\nDetails: The problem is infeasible. No selection of modules satisfies all constraints.")
-            # Check if area was minimized, as infeasibility might be due to other constraints
             if result.get("area_minimized"):
                 print("         (Note: Area was being minimized, infeasibility is due to other resource constraints).")
             else:
@@ -795,3 +797,13 @@ if __name__ == "__main__":
 
     print("\n--- All Specifications Processed ---")
     print("\n--- Script Finished ---")
+    return optimization_results # Return the results list
+
+
+# --- Main Execution Block ---
+if __name__ == "__main__":
+    # Call the main function with default paths
+    results = run_optimization_and_print_results(MODULES_CSV_PATH, SPEC_CSV_PATH)
+
+    if results is None:
+        sys.exit(1) # Exit if the function indicated failure
