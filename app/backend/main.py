@@ -40,8 +40,6 @@ class PositionedModule(Module):
     gridRow: int
 
 class SpecRule(BaseModel):
-    ID: int
-    Name: str
     Below_Amount: int
     Above_Amount: int
     Minimize: int
@@ -55,7 +53,7 @@ class DataCenter(BaseModel):
     name: str
     specs: List[SpecRule]
     details: Dict[str, float]
-    modules: List[Dict[str, object]]  # id, name, x, y, width, height
+    modules: List[PositionedModule]
 
 
 # GET: return all modules
@@ -135,11 +133,13 @@ def update_module(module_id: int, updated: Module):
     return {"message": "Updated"}
 
 ######################### DATACENTER #########################
+# GET: return all datacenters
 @app.get("/datacenters")
 def get_all_datacenters():
     db = get_database()
     return list(db.datacenters.find({}, {"_id": 0}))
 
+# GET: a single datacenter
 @app.get("/datacenters/{id}")
 def get_datacenter(id: int):
     db = get_database()
@@ -148,6 +148,7 @@ def get_datacenter(id: int):
         raise HTTPException(status_code=404, detail="Not found")
     return result
 
+# POST: add a new datacenter
 @app.post("/datacenters")
 def create_datacenter(dc: DataCenter):
     db = get_database()
@@ -156,12 +157,14 @@ def create_datacenter(dc: DataCenter):
     db.datacenters.insert_one(dc.model_dump())
     return {"message": "Datacenter saved"}
 
+# PUT: update a datacenter
 @app.put("/datacenters/{id}")
 def update_datacenter(id: int, dc: DataCenter):
     db = get_database()
     db.datacenters.update_one({"id": id}, {"$set": dc.model_dump()})
     return {"message": "Datacenter updated"}
 
+# DELETE: delete a datacenter
 @app.delete("/datacenters/{id}")
 def delete_datacenter(id: int):
     db = get_database()

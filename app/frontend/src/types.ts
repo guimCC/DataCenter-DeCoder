@@ -15,5 +15,25 @@ export interface Module {
 export interface PositionedModule extends Module {
     gridColumn: number;
     gridRow: number;
+    height: number;
+    width: number;
+  }
+
+  export interface SpecRule {
+    Below_Amount: number;
+    Above_Amount: number;
+    Minimize: number;
+    Maximize: number;
+    Unconstrained: number;
+    Unit: string;
+    Amount: number;
   }
   
+  // Update the DataCenter interface
+  export interface DataCenter {
+    id: number;
+    name: string;
+    specs: SpecRule[];  // Change from string to array of SpecRule
+    details: Record<string, number>;
+    modules: PositionedModule[];  // Change to match backend response
+  }

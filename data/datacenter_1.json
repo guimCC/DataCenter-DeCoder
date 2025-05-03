@@ -1,13 +1,16 @@
 {
-    "id": 1,
-    "name": "Server_Square",
+    "id": 2,
+    "name": "Correct_Server_Square",
     "specs": [
       { "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "price", "Amount": 1000000 },
       { "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "grid_connection", "Amount": 3 },
       { "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "water_connection", "Amount": 1 },
       { "Below_Amount": 0, "Above_Amount": 1, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "data_storage", "Amount": 1000 },
       { "Below_Amount": 0, "Above_Amount": 1, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "processing", "Amount": 1000 },
-      { "Below_Amount": 0, "Above_Amount": 0, "Minimize": 0, "Maximize": 1, "Unconstrained": 0, "Unit": "external_network", "Amount": -1 }
+      { "Below_Amount": 0, "Above_Amount": 0, "Minimize": 0, "Maximize": 1, "Unconstrained": 0, "Unit": "external_network", "Amount": -1 },
+      { "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "space_x", "Amount": 1000 },
+      { "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "space_y", "Amount": 500 }
+
     ],
     "details": {
       "chilled_water": 4,
