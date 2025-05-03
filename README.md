@@ -120,3 +120,8 @@ Place datacenters on a map
 Modify an existing setup with new constraints
 
 Scale up to more complex environments and goals
+
+# Requirements
+**Backend:**
+- pip install fastapi uvicorn pymongo pydantic
+- pip install motor
