@@ -128,7 +128,7 @@ Scale up to more complex environments and goals
 
 Run with: `uvicorn main:app --reload --port 8000`
 
-**Frontend:
+**Frontend**:
 - `npm create vite@latest . --template react`
 - `npm install`
 - `npm install @mui/material @emotion/react @emotion/styled`
