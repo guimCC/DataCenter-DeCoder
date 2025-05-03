@@ -4,7 +4,7 @@ from typing import List
 from pydantic import BaseModel
 
 # MongoDB
-from mongo_utils import insert_modules, get_all_modules
+from mongo_utils import insert_modules, get_all_modules, get_database
 
 
 app = FastAPI()
@@ -61,11 +61,13 @@ def add_module(module: Module):
     insert_modules([module.model_dump()])
     return {"message": "Module added"}
 
+# POST: add many modules
 @app.post("/modules/upload-many")
 def upload_many(modules: List[Module]):
     insert_modules([m.model_dump() for m in modules])
     return {"message": "Modules uploaded"}
 
+# POST: solve dummy layout
 @app.post("/solve-dummy")
 async def solve_dummy():
     dummy_modules = [
@@ -109,3 +111,11 @@ async def solve_dummy():
         positioned.append(mod)
 
     return {"modules": positioned}
+
+# POST: solve layout
+@app.delete("/modules/{module_id}")
+def delete_module(module_id: int):
+    db = get_database()
+    result = db.modules.delete_one({"id": module_id})
+    return {"success": result.deleted_count > 0}
+
