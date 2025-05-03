@@ -93,8 +93,6 @@ weights = {
     "data_storage": 1.0,     # From Spec ID 1
     "processing": 1.0,       # From Spec ID 1
     "price": 1.0,            # From Spec ID 1
-    "space_x": 0.1,          # Example weight if minimizing area
-    "space_y": 0.1,          # Example weight if minimizing area
     "total_area": 0.1        # Example weight if minimizing area
 }
 print(f"Using weights: {weights}")
