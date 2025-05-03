@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 
 backend/venv*
+.gitignore
+backend/__pycache__/*
