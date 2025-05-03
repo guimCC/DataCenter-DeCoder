@@ -5,8 +5,8 @@ import math
 
 # --- Configuration ---
 # TARGET_DATACENTER_SPEC_NAME = "Server_Square" # Removed - will iterate through all specs
-MODULES_CSV_PATH = "Modules.csv"
-SPEC_CSV_PATH = "Data_Center_Spec.csv"
+MODULES_CSV_PATH = "data/Modules.csv"
+SPEC_CSV_PATH = "data/Data_Center_Spec.csv"
 
 # --- Helper Function to Load and Process Data ---
 def standardize_unit_name(name):
