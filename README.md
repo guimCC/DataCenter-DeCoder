@@ -125,6 +125,7 @@ Scale up to more complex environments and goals
 **Backend:**
 - `pip install fastapi uvicorn pymongo pydantic`
 - `pip install motor`
+- `pip install pymongo pymongo[srv] python-dotenv`
 
 Run with: `uvicorn main:app --reload --port 8000`
 
