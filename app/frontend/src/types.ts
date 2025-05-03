@@ -6,7 +6,7 @@ export interface IOField {
 }
   
 export interface Module {
-    id: number;
+    id: string;
     name: string;
     io_fields: IOField[];
 } 
