@@ -39,14 +39,27 @@ def solve_for(block_name, verbose=True):
     # 5) Add resource constraints
     for _, row in block.iterrows():
         unit = row.Unit
-        amt  = row.Amount
-        lhs  = pulp.lpSum(a[i].get(unit, 0) * x[i] for i in module_ids)
-
-        if row.Above_Amount == 1:
-            prob += lhs >= amt, f"{unit}_min_{amt}"
-        if row.Below_Amount == 1:
-            prob += lhs <= amt, f"{unit}_max_{amt}"
-        # you can incorporate Minimize/Maximize flags here too
+        lhs = pulp.lpSum(a[i].get(unit, 0) * x[i] for i in module_ids)
+        
+        # Check if Amount is defined and not NaN
+        has_amount = pd.notna(row.Amount)
+        
+        # Add constraints based on flags
+        if row.Above_Amount == 1 and has_amount:
+            prob += lhs >= row.Amount, f"{unit}_min_{row.Amount}"
+        
+        if row.Below_Amount == 1 and has_amount:
+            prob += lhs <= row.Amount, f"{unit}_max_{row.Amount}"
+        
+        # Handle Minimize/Maximize flags
+        if row.Minimize == 1:
+            # For minimization, add the term to the objective with a small weight
+            # We use a small weight to prioritize cost minimization
+            prob.objective += 0.001 * lhs
+            
+        if row.Maximize == 1:
+            # For maximization, subtract the term from the objective with a small weight
+            prob.objective -= 0.001 * lhs
 
     # 6) Solve
     prob.solve(pulp.PULP_CBC_CMD(msg=0))
