@@ -57,3 +57,61 @@ def get_modules():
 def add_module(module: Module):
     MODULES.append(module)
     return {"message": "Module added"}
+
+# POST: solve the optimization problem
+@app.post("/solve")
+async def solve_dummy():
+    return {
+        "modules": [
+            {
+                "id": 1,
+                "name": "Transformer_100",
+                "io_fields": [
+                    {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 40},
+                    {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 40},
+                    {"is_input": True, "is_output": False, "unit": "Price", "amount": 1000},
+                    {"is_input": False, "is_output": True, "unit": "Power", "amount": 100}
+                ]
+            },
+            {
+                "id": 2,
+                "name": "Transformer_500",
+                "io_fields": [
+                    {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 60},
+                    {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 40},
+                    {"is_input": True, "is_output": False, "unit": "Price", "amount": 2000},
+                    {"is_input": False, "is_output": True, "unit": "Power", "amount": 500}
+                ]
+            },
+            {
+                "id": 3,
+                "name": "Cooling_Unit",
+                "io_fields": [
+                    {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 20},
+                    {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 20},
+                    {"is_input": True, "is_output": False, "unit": "Price", "amount": 500},
+                    {"is_input": False, "is_output": True, "unit": "Cooling", "amount": 100}
+                ]
+            },
+            {
+                "id": 4,
+                "name": "Processor_A1",
+                "io_fields": [
+                    {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 30},
+                    {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 30},
+                    {"is_input": True, "is_output": False, "unit": "Price", "amount": 1500},
+                    {"is_input": False, "is_output": True, "unit": "Processing", "amount": 200}
+                ]
+            },
+            {
+                "id": 5,
+                "name": "Water_Supply",
+                "io_fields": [
+                    {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 50},
+                    {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 25},
+                    {"is_input": True, "is_output": False, "unit": "Price", "amount": 800},
+                    {"is_input": False, "is_output": True, "unit": "Water", "amount": 300}
+                ]
+            }
+        ]
+    }
