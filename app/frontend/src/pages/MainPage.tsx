@@ -24,6 +24,18 @@ const MainPage = () => {
     maxSpaceY: ''
   });
 
+    // Color map for different module types
+  const MODULE_COLORS = {
+    transformer: '#E9DA54',    // Blue
+    water_supply: '#2196f3',   // Light blue
+    water_treatment: '#03a9f4', // Cyan
+    water_chiller: '#00bcd4',  // Teal
+    network_rack: '#ff9800',   // Orange
+    server_rack: '#4caf50',    // Green
+    data_rack: '#9c27b0',      // Purple
+    default: '#757575'         // Gray (fallback)
+  };
+
   const [resultModules, setResultModules] = useState<PositionedModule[]>([]);
 
   const handleChange = (field: string, value: string) => {
@@ -59,45 +71,30 @@ const MainPage = () => {
       id: mod.id.toString(),
     });
   
-    // Get sprite name from module name
-    // Get sprite name from module name
-    // Get sprite name from module name
-    // Modifica tu función getSpritePath
+    // Get module type for coloring and sprite
+    const getModuleType = () => {
+      const name = mod.name.toLowerCase();
+      if (name.startsWith('transformer')) return 'transformer';
+      if (name.includes('network_rack')) return 'network_rack';
+      if (name.includes('server_rack')) return 'server_rack';
+      if (name.includes('data_rack')) return 'data_rack';
+      if (name.includes('water_supply')) return 'water_supply';
+      if (name.includes('water_treatment')) return 'water_treatment';
+      if (name.includes('water_chiller')) return 'water_chiller';
+      return 'default';
+    };
+  
+    // Get color based on module type
+    const getModuleColor = () => {
+      const type = getModuleType();
+      return MODULE_COLORS[type as keyof typeof MODULE_COLORS] || MODULE_COLORS.default;
+    };
+  
+    // Get sprite path based on module type
     const getSpritePath = () => {
-      let path = '';
-      console.log(`Procesando módulo: ${mod.name}`);
-      
-      // Para transformador, el formato es "Transformer_100"
-      if (mod.name.toLowerCase().startsWith('transformer')) {
-        path = `/sprites/transformer.png`;
-      }
-      // Para Network_Rack, Server_Rack, Data_Rack (formato es "Network_Rack_50")
-      else if (mod.name.toLowerCase().includes('network_rack')) {
-        path = `/sprites/network_rack.png`;
-      }
-      else if (mod.name.toLowerCase().includes('server_rack')) {
-        path = `/sprites/server_rack.png`;
-      }
-      else if (mod.name.toLowerCase().includes('data_rack')) {
-        path = `/sprites/data_rack.png`;
-      }
-      // Para sistemas de agua (Water_Supply, Water_Treatment, Water_Chiller)
-      else if (mod.name.toLowerCase().includes('water_supply')) {
-        path = `/sprites/water_supply.png`;
-      }
-      else if (mod.name.toLowerCase().includes('water_treatment')) {
-        path = `/sprites/water_treatment.png`;
-      }
-      else if (mod.name.toLowerCase().includes('water_chiller')) {
-        path = `/sprites/water_chiller.png`;
-      }
-      // Para cualquier otro caso, usa el transformador como fallback
-      else {
-        path = `/sprites/transformer.png`;
-      }
-      
-      console.log(`Ruta del sprite: ${path}`);
-      return path;
+      const type = getModuleType();
+      // Default to transformer for 'default' type
+      return `/sprites/${type === 'default' ? 'transformer' : type}.png`;
     };
       
     return (
@@ -108,7 +105,7 @@ const MainPage = () => {
         sx={{
           gridColumn: `${mod.gridColumn} / span ${spanX}`,
           gridRow: `${mod.gridRow} / span ${spanY}`,
-          backgroundColor: '#1976d2',
+          backgroundColor: getModuleColor(), // Use the module-specific color
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
@@ -116,6 +113,7 @@ const MainPage = () => {
           zIndex: 1,
           cursor: 'move',
           padding: 0.5,
+          border: '1px solid rgba(255, 255, 255, 0.2)', // Add subtle border
         }}
       >
         {/* Solo el sprite sin el nombre */}
@@ -124,9 +122,10 @@ const MainPage = () => {
           src={getSpritePath()}
           alt={mod.name}
           sx={{
-            width: '80%',          // Relativo al tamaño de la celda
-            height: '80%',         // Relativo al tamaño de la celda
+            width: '80%',
+            height: '80%',
             objectFit: 'contain',
+            filter: 'brightness(1.1)', // Make sprites stand out a bit more
           }}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none';
@@ -135,7 +134,6 @@ const MainPage = () => {
       </Box>
     );
   };
-
   // Añade este componente para la leyenda
   // Modifica el componente ModuleLegend
   const ModuleLegend = () => {
@@ -148,31 +146,45 @@ const MainPage = () => {
       { name: 'server_rack', displayName: 'Server Rack' },
       { name: 'data_rack', displayName: 'Data Rack' },
     ];
-
+  
     return (
       <Paper sx={{ 
         p: 2, 
         ml: 2, 
         width: 200, 
-        backgroundColor: 'rgba(200, 200, 200, 0.9)', 
+        backgroundColor: 'rgba(32, 20, 52, 0.85)', // Match main background but with transparency
         position: 'absolute',
         right: 20,
         top: 20,
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        borderRadius: 2,
       }}>
-        <Typography variant="h6" gutterBottom sx={{ color: '#333' }}>Legend</Typography>
+        <Typography variant="h6" gutterBottom sx={{ color: 'white' }}>Legend</Typography>
         {moduleTypes.map((type) => (
-          <Box key={type.name} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box key={type.name} sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            mb: 1,
+            p: 0.5,
+            borderRadius: 1,
+            backgroundColor: MODULE_COLORS[type.name as keyof typeof MODULE_COLORS],
+          }}>
             <Box
               component="img"
               src={`/sprites/${type.name}.png`}
               alt={type.displayName}
-              sx={{ width: 24, height: 24, mr: 1 }}
+              sx={{ 
+                width: 24, 
+                height: 24, 
+                mr: 1,
+                filter: 'brightness(1.1)',
+              }}
               onError={(e) => {
                 console.log(`Error loading image: /sprites/${type.name}.png`);
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
-            <Typography variant="body2" sx={{ color: '#333' }}>
+            <Typography variant="body2" sx={{ color: 'white', fontWeight: 'bold' }}>
               {type.displayName}
             </Typography>
           </Box>
