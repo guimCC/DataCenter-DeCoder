@@ -6,6 +6,7 @@ from pydantic import BaseModel
 # MongoDB
 from mongo_utils import insert_modules, get_all_modules, get_database
 
+from solver_utils import solve_module_list, solve_module_placement
 
 app = FastAPI()
 
@@ -119,6 +120,22 @@ async def solve_dummy():
         positioned.append(mod)
 
     return {"modules": positioned}
+
+
+# POST: solve layout
+@app.post("/solve-dummy")
+async def solve(specs: json, weights) -> json:
+    modules = get_modules()
+    # solve for the list of modules
+    module_list = solve_module_list(modules, specs, weights)
+    
+    # solve for the location given the list of modules
+    return solve_module_placement(modules, specs, weights, module_list)
+
+
+
+
+
 
 # DELETE: delete a module
 @app.delete("/modules/{module_id}")
