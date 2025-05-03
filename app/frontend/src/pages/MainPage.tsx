@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import {
-  Box, TextField, Typography, Button, Grid, Paper
+  Box, TextField, Typography, Button
 } from '@mui/material';
-import { Module } from '../types';
+import { PositionedModule } from '../types';
 
-
-const GRID_ROWS = 10;
-const GRID_COLS = 10;
-const CELL_SIZE = 40; // pixels (each "5x5 space" will be 40x40)
-
+const GRID_ROWS = 20;
+const GRID_COLS = 20;
+const CELL_SIZE = 10;
 
 const MainPage = () => {
   const [constraints, setConstraints] = useState({
@@ -17,14 +15,14 @@ const MainPage = () => {
     maxSpaceY: ''
   });
 
-  const [resultModules, setResultModules] = useState<Module[]>([]);
+  const [resultModules, setResultModules] = useState<PositionedModule[]>([]);
 
   const handleChange = (field: string, value: string) => {
     setConstraints(prev => ({ ...prev, [field]: value }));
   };
 
   const handleDesign = () => {
-    fetch("http://localhost:8000/solve", {
+    fetch("http://localhost:8000/solve-dummy", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -35,33 +33,28 @@ const MainPage = () => {
         }
       })
     })
-    .then(res => res.json())
-    .then(data => setResultModules(data.modules || []))
-    .catch(err => console.error("Design failed:", err));
+      .then(res => res.json())
+      .then(data => setResultModules(data.modules || []))
+      .catch(err => console.error("Design failed:", err));
   };
-
-  const renderEmptyCells = () => {
-    const total = GRID_ROWS * GRID_COLS;
-    return Array.from({ length: total }).map((_, index) => (
-      <Box
-        key={`cell-${index}`}
-        sx={{
-          width: CELL_SIZE,
-          height: CELL_SIZE,
-          border: '1px solid rgba(0,0,0,0.1)',
-          boxSizing: 'border-box',
-        }}
-      />
-    ));
-  };
-  
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>DataCenter Specs</Typography>
+    <Box
+      sx={{
+        height: '100vh',
+        width: '100vw',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        paddingTop: '4rem',
+        gap: 4,
+        backgroundColor: '#201434',
+        overflow: 'hidden',
+      }}
+    >
+      <Typography variant="h4" color="white">DataCenter Specs</Typography>
 
-      {/* === Constraint Input Form === */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+      <Box sx={{ display: 'flex', gap: 2 }}>
         <TextField
           label="Max Price"
           value={constraints.maxPrice}
@@ -85,44 +78,55 @@ const MainPage = () => {
         </Button>
       </Box>
 
-      {/* === Result Grid === */}
-      <Typography variant="h6">Configuration Result:</Typography>
-      {/* === Visual Grid Layout === */}
-      <Box /* Això és la GRID en sí*/
+      <Typography variant="h6" color="white">Configuration Result:</Typography>
+
+      <Box
         sx={{
           display: 'grid',
           gridTemplateColumns: `repeat(${GRID_COLS}, ${CELL_SIZE}px)`,
           gridTemplateRows: `repeat(${GRID_ROWS}, ${CELL_SIZE}px)`,
-          gap: '2px',
-          backgroundColor: '#ccc',
-          padding: 1,
-          width: `${GRID_COLS * (CELL_SIZE + 2)}px`,
-          height: `${GRID_ROWS * (CELL_SIZE + 2)}px`,
-          border: '1px solid black',
+          backgroundColor: '#201434',
+          border: '1px solid #333',
+          backgroundImage: `
+            linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px)
+          `,
+          backgroundSize: `${CELL_SIZE}px ${CELL_SIZE}px`,
           position: 'relative',
+          overflow: 'visible',
         }}
       >
-        {renderEmptyCells()}
-        {resultModules.map((mod, i) => (
-          <Box /* Això és cada MODUL*/
-            key={i}
-            sx={{
-              gridColumn: `${1 + (i % GRID_COLS)} / span 2`, // for now, place in a line
-              gridRow: `${1 + Math.floor(i / GRID_COLS)} / span 2`,
-              backgroundColor: '#1976d2',
-              color: 'white',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              fontSize: 12,
-              borderRadius: 1,
-            }}
-          >
-            {mod.name}
-          </Box>
-        ))}
-      </Box>
+        {resultModules.map((mod, i) => {
+          const spaceX = mod.io_fields.find(io => io.unit === 'Space_X')?.amount || 1;
+          const spaceY = mod.io_fields.find(io => io.unit === 'Space_Y')?.amount || 1;
 
+          const spanX = Math.max(1, Math.round(spaceX / CELL_SIZE));
+          const spanY = Math.max(1, Math.round(spaceY / CELL_SIZE));
+
+          return (
+            <Box
+              key={`mod-${i}`}
+              sx={{
+                gridColumn: `${mod.gridColumn} / span ${spanX}`,
+                gridRow: `${mod.gridRow} / span ${spanY}`,
+                backgroundColor: '#1976d2',
+                color: 'white',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                fontSize: 10,
+                borderRadius: 1,
+                zIndex: 1,
+                overflow: 'hidden',
+                textAlign: 'center',
+                padding: 0.5,
+              }}
+            >
+              {mod.name}
+            </Box>
+          );
+        })}
+      </Box>
     </Box>
   );
 };

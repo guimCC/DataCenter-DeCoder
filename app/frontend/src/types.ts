@@ -10,3 +10,10 @@ export interface Module {
     name: string;
     io_fields: IOField[];
 } 
+
+/* Afegeix més propietats al mòdul*/
+export interface PositionedModule extends Module {
+    gridColumn: number;
+    gridRow: number;
+  }
+  
