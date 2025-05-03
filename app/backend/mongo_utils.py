@@ -1,5 +1,4 @@
 import pymongo
-import pandas as pd
 
 # Conexión hardcodeada a MongoDB Atlas
 MONGO_URI = "mongodb+srv://decoder:decoder@cluster0.dniasbm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -20,6 +19,17 @@ def test_connection():
     except Exception as e:
         print(f"❌ Error al conectar a MongoDB: {e}")
         return False
+
+def insert_modules(modules):
+    db = get_database()
+    collection = db.modules
+    result = collection.insert_many(modules)
+    return result.inserted_ids
+
+def get_all_modules():
+    db = get_database()
+    collection = db.modules
+    return list(collection.find({}, {"_id": 0}))
 
 # Para probar la conexión cuando se ejecuta este archivo directamente
 if __name__ == "__main__":

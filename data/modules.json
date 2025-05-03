@@ -1,0 +1,1502 @@
+[
+    {
+        "id": 1,
+        "name": "Transformer_100",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Grid_Connection",
+                "amount": 1.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 45.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 1000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Usable_Power",
+                "amount": 100.0
+            }
+        ]
+    },
+    {
+        "id": 2,
+        "name": "Transformer_1000",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Grid_Connection",
+                "amount": 1.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 50000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Usable_Power",
+                "amount": 1000.0
+            }
+        ]
+    },
+    {
+        "id": 3,
+        "name": "Transformer_5000",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Grid_Connection",
+                "amount": 1.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 200.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 200.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 250000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Usable_Power",
+                "amount": 5000.0
+            }
+        ]
+    },
+    {
+        "id": 4,
+        "name": "Water_Supply_100",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Water_Connection",
+                "amount": 1.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 200.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Fresh_Water",
+                "amount": 100.0
+            }
+        ]
+    },
+    {
+        "id": 5,
+        "name": "Water_Supply_500",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Water_Connection",
+                "amount": 1.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 150.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 400.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Fresh_Water",
+                "amount": 500.0
+            }
+        ]
+    },
+    {
+        "id": 6,
+        "name": "Water_Treatment_50",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Fresh_Water",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 10000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 50.0
+            }
+        ]
+    },
+    {
+        "id": 7,
+        "name": "Water_Treatment_250",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Fresh_Water",
+                "amount": 250.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 90.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 200.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 200.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 40000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 250.0
+            }
+        ]
+    },
+    {
+        "id": 8,
+        "name": "Water_Treatment_500",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Fresh_Water",
+                "amount": 500.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 150.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 400.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 400.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 70000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 500.0
+            }
+        ]
+    },
+    {
+        "id": 9,
+        "name": "Water_Chiller_100",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Distilled_Water",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 500.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 40000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Chilled_Water",
+                "amount": 95.0
+            }
+        ]
+    },
+    {
+        "id": 10,
+        "name": "Water_Chiller_400",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Distilled_Water",
+                "amount": 400.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 1500.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 300.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 150000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Chilled_Water",
+                "amount": 390.0
+            }
+        ]
+    },
+    {
+        "id": 11,
+        "name": "Network_Rack_50",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 5.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Internal_Network",
+                "amount": 50.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Fresh_Water",
+                "amount": 5.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 2000.0
+            }
+        ]
+    },
+    {
+        "id": 12,
+        "name": "Network_Rack_100",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 75.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 7.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Internal_Network",
+                "amount": 100.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Fresh_Water",
+                "amount": 7.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 8000.0
+            }
+        ]
+    },
+    {
+        "id": 13,
+        "name": "Network_Rack_200",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 95.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 10.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Internal_Network",
+                "amount": 200.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Fresh_Water",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 20000.0
+            }
+        ]
+    },
+    {
+        "id": 14,
+        "name": "Server_Rack_100",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 75.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 15.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 10.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 15.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Processing",
+                "amount": 100.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "External_Network",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 8000.0
+            }
+        ]
+    },
+    {
+        "id": 15,
+        "name": "Server_Rack_200",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 125.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 25.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 18.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 25.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Processing",
+                "amount": 150.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "External_Network",
+                "amount": 200.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 12000.0
+            }
+        ]
+    },
+    {
+        "id": 16,
+        "name": "Server_Rack_500",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 240.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 32.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 50.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Processing",
+                "amount": 1000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "External_Network",
+                "amount": 400.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 50000.0
+            }
+        ]
+    },
+    {
+        "id": 17,
+        "name": "Data_Rack_100",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 15.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 3.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 5.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 3.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Data_Storage",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 2000.0
+            }
+        ]
+    },
+    {
+        "id": 18,
+        "name": "Data_Rack_250",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 25.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 3.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 10.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 3.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Data_Storage",
+                "amount": 250.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 7500.0
+            }
+        ]
+    },
+    {
+        "id": 19,
+        "name": "Data_Rack_500",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 6.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 20.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 6.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Data_Storage",
+                "amount": 500.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 20500.0
+            }
+        ]
+    },
+    {
+        "id": 20,
+        "name": "UPS_Small",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 5.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 30.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 30.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 15000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Usable_Power",
+                "amount": 4.5
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Backup_Power",
+                "amount": 50.0
+            }
+        ]
+    },
+    {
+        "id": 21,
+        "name": "UPS_Medium",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 20.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 80.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 80.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 55000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Usable_Power",
+                "amount": 18.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Backup_Power",
+                "amount": 250.0
+            }
+        ]
+    },
+    {
+        "id": 22,
+        "name": "Liquid_Cooling_Unit_A",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Distilled_Water",
+                "amount": 150.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 400.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 120.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 80.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 70000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Chilled_Water",
+                "amount": 145.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Waste_Heat",
+                "amount": 500.0
+            }
+        ]
+    },
+    {
+        "id": 23,
+        "name": "Heat_Recovery_System_Water",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Waste_Heat",
+                "amount": 1000.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 20.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 150.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 150.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 90000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Fresh_Water",
+                "amount": 10.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Usable_Power",
+                "amount": 50.0
+            }
+        ]
+    },
+    {
+        "id": 24,
+        "name": "Heat_Recovery_System_Power",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Waste_Heat",
+                "amount": 1500.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 200.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 150.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 120000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Usable_Power",
+                "amount": 80.0
+            }
+        ]
+    },
+    {
+        "id": 25,
+        "name": "Core_Router_HighBW",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 150.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 120000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Internal_Network",
+                "amount": 500.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "External_Network",
+                "amount": 200.0
+            }
+        ]
+    },
+    {
+        "id": 26,
+        "name": "GPU_Rack_Compute",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 2000.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 200.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 60.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 150000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Processing",
+                "amount": 5000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Waste_Heat",
+                "amount": 1800.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 200.0
+            }
+        ]
+    },
+    {
+        "id": 27,
+        "name": "Archive_Storage_Unit",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 10.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 60.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 80.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 30000.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 5.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Data_Storage",
+                "amount": 2000.0
+            }
+        ]
+    },
+    {
+        "id": 28,
+        "name": "Water_Chiller_400_Eco",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Distilled_Water",
+                "amount": 400.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 1300.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 280.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 90.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 135000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Chilled_Water",
+                "amount": 385.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Waste_Heat",
+                "amount": 1400.0
+            }
+        ]
+    },
+    {
+        "id": 29,
+        "name": "Water_Treatment_Advanced",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Fresh_Water",
+                "amount": 300.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Recycled_Water",
+                "amount": 100.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 120.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 250.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 250.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 60000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 380.0
+            }
+        ]
+    },
+    {
+        "id": 30,
+        "name": "Water_Recycling_Unit",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Distilled_Water",
+                "amount": 50.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 30.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 70.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 70.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 25000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Recycled_Water",
+                "amount": 45.0
+            }
+        ]
+    },
+    {
+        "id": 31,
+        "name": "Server_Rack_500_Balanced",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 220.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Chilled_Water",
+                "amount": 45.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 30.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 40.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 45000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Distilled_Water",
+                "amount": 45.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Processing",
+                "amount": 800.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "External_Network",
+                "amount": 350.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Data_Storage",
+                "amount": 100.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Waste_Heat",
+                "amount": 200.0
+            }
+        ]
+    },
+    {
+        "id": 32,
+        "name": "Network_Firewall_Appliance",
+        "io_fields": [
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Usable_Power",
+                "amount": 80.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Internal_Network",
+                "amount": 10.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "External_Network",
+                "amount": 10.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_X",
+                "amount": 30.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Space_Y",
+                "amount": 30.0
+            },
+            {
+                "is_input": true,
+                "is_output": false,
+                "unit": "Price",
+                "amount": 60000.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "Internal_Network",
+                "amount": 10.0
+            },
+            {
+                "is_input": false,
+                "is_output": true,
+                "unit": "External_Network",
+                "amount": 10.0
+            }
+        ]
+    }
+]

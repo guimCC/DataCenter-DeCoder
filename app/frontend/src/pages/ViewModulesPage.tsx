@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
-  Box, Typography, Card, CardContent
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Grid,
+  Divider,
 } from '@mui/material';
 import { Module } from '../types';
 
@@ -24,35 +29,42 @@ const ViewModulesPage = () => {
         overflowY: 'auto',
         boxSizing: 'border-box',
         color: 'white',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 3
       }}
     >
-      <Typography variant="h4">All Available Modules</Typography>
+      <Typography variant="h4" textAlign="center" gutterBottom>
+        Available Modules
+      </Typography>
 
-      {modules.map((mod, i) => (
-        <Card
-          key={i}
-          sx={{
-            width: '100%',
-            maxWidth: '600px',
-            backgroundColor: '#2a1b4f',
-            color: 'white',
-            border: '1px solid #444'
-          }}
-        >
-          <CardContent>
-            <Typography variant="h6">{mod.name}</Typography>
-            {mod.io_fields.map((io, j) => (
-              <Typography key={j} variant="body2">
-                {io.is_input ? 'Input' : 'Output'} - {io.unit}: {io.amount}
-              </Typography>
-            ))}
-          </CardContent>
-        </Card>
-      ))}
+      <Grid container spacing={3} justifyContent="center">
+        {modules.map((mod, i) => (
+          <Grid item key={i} xs={12} sm={10} md={6} lg={4}>
+            <Card
+              sx={{
+                backgroundColor: '#2a1b4f',
+                border: '1px solid #444',
+              }}
+            >
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  {mod.name}
+                </Typography>
+
+                <Divider sx={{ borderColor: '#444', mb: 1 }} />
+
+                {mod.io_fields.map((io, j) => (
+                  <Typography
+                    key={j}
+                    variant="body2"
+                    sx={{ color: io.is_input ? '#90caf9' : '#80cbc4' }}
+                  >
+                    {io.is_input ? 'Input' : 'Output'} — {io.unit}: {io.amount}
+                  </Typography>
+                ))}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
     </Box>
   );
 };

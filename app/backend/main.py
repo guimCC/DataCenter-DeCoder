@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 from pydantic import BaseModel
 
+# MongoDB
+from mongo_utils import insert_modules, get_all_modules
+
 
 app = FastAPI()
 
@@ -50,13 +53,18 @@ class Module(BaseModel):
 # GET: return all modules
 @app.get("/modules")
 def get_modules():
-    return MODULES
+    return get_all_modules()
 
 # POST: add a new module
 @app.post("/modules")
 def add_module(module: Module):
-    MODULES.append(module)
+    insert_modules([module.model_dump()])
     return {"message": "Module added"}
+
+@app.post("/modules/upload-many")
+def upload_many(modules: List[Module]):
+    insert_modules([m.model_dump() for m in modules])
+    return {"message": "Modules uploaded"}
 
 @app.post("/solve-dummy")
 async def solve_dummy():
