@@ -57,3 +57,47 @@ def get_modules():
 def add_module(module: Module):
     MODULES.append(module)
     return {"message": "Module added"}
+
+@app.post("/solve-dummy")
+async def solve_dummy():
+    dummy_modules = [
+        {
+            "id": 1,
+            "name": "Transformer_100",
+            "io_fields": [
+                {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 40},
+                {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 40},
+                {"is_input": True, "is_output": False, "unit": "Price", "amount": 1000},
+                {"is_input": False, "is_output": True, "unit": "Power", "amount": 100}
+            ]
+        },
+        {
+            "id": 2,
+            "name": "Cooling_Unit",
+            "io_fields": [
+                {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 30},
+                {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 30},
+                {"is_input": True, "is_output": False, "unit": "Price", "amount": 500},
+                {"is_input": False, "is_output": True, "unit": "Cooling", "amount": 100}
+            ]
+        },
+        {
+            "id": 3,
+            "name": "Processor_X",
+            "io_fields": [
+                {"is_input": True, "is_output": False, "unit": "Space_X", "amount": 50},
+                {"is_input": True, "is_output": False, "unit": "Space_Y", "amount": 25},
+                {"is_input": True, "is_output": False, "unit": "Price", "amount": 3000},
+                {"is_input": False, "is_output": True, "unit": "Processing", "amount": 500}
+            ]
+        },
+    ]
+
+    # Fake layout logic: place modules left to right
+    positioned = []
+    for i, mod in enumerate(dummy_modules):
+        mod["gridColumn"] = 1 #+ 10*i  # Space each 3 cells apart
+        mod["gridRow"] = 1 + 5 * i
+        positioned.append(mod)
+
+    return {"modules": positioned}
