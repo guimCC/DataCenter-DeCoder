@@ -12,13 +12,12 @@ import pandas as pd
 from ortools.sat.python import cp_model
 import sys
 import time # To measure solve time
-import math # Import math for ceiling division if needed, or use //
 
 # --- Configuration ---
 MODULES_CSV_PATH = "data/Modules.csv"
 SPEC_CSV_PATH = "data/Data_Center_Spec.csv"
 # Solver time limit in seconds
-SOLVER_TIME_LIMIT_SECONDS = 120.0
+SOLVER_TIME_LIMIT_SECONDS = 600.0
 
 # Define Resource Categories
 INPUT_RESOURCES = ['price', 'grid_connection', 'water_connection']
