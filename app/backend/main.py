@@ -112,10 +112,16 @@ async def solve_dummy():
 
     return {"modules": positioned}
 
-# POST: solve layout
+# DELETE: delete a module
 @app.delete("/modules/{module_id}")
 def delete_module(module_id: int):
     db = get_database()
     result = db.modules.delete_one({"id": module_id})
     return {"success": result.deleted_count > 0}
 
+# PUT: update a module
+@app.put("/modules/{module_id}")
+def update_module(module_id: int, updated: Module):
+    db = get_database()
+    db.modules.update_one({"id": module_id}, {"$set": updated.dict()})
+    return {"message": "Updated"}

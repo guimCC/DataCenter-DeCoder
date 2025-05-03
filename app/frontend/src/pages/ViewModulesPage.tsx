@@ -14,6 +14,21 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Module } from '../types';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import IconButton from '@mui/material/IconButton';
+import {
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    TextField,
+    Button,
+    Checkbox,
+    FormControlLabel,
+  } from '@mui/material';
+  
+
 
 const getModuleType = (name: string) => {
   const lower = name.toLowerCase();
@@ -38,6 +53,9 @@ const getModuleType = (name: string) => {
 
 const ViewModulesPage = () => {
   const [modules, setModules] = useState<Module[]>([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editModule, setEditModule] = useState<Module | null>(null);
+
 
   useEffect(() => {
     fetch("http://localhost:8000/modules")
@@ -52,6 +70,48 @@ const ViewModulesPage = () => {
     if (!groupedModules[type]) groupedModules[type] = [];
     groupedModules[type].push(mod);
   });
+
+  const handleDelete = (id: number) => {
+    if (!confirm("Are you sure you want to delete this module?")) return;
+  
+    fetch(`http://localhost:8000/modules/${id}`, {
+      method: 'DELETE'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setModules(prev => prev.filter(m => m.id !== id));
+        } else {
+          alert("Delete failed.");
+        }
+      });
+  };
+
+  const handleEdit = (mod: Module) => {
+    // deep copy to avoid editing state directly
+    const copy = JSON.parse(JSON.stringify(mod));
+    setEditModule(copy);
+    setEditOpen(true);
+  };
+
+  const handleEditSubmit = () => {
+    if (!editModule) return;
+  
+    fetch(`http://localhost:8000/modules/${editModule.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editModule),
+    })
+      .then(res => res.json())
+      .then(() => {
+        setModules(prev =>
+          prev.map(m => (m.id === editModule.id ? editModule : m))
+        );
+        setEditOpen(false);
+      });
+  };
+  
+  
 
   return (
     <Box
@@ -115,9 +175,19 @@ const ViewModulesPage = () => {
                     <Grid item key={i} xs={12} sm={6} md={4} lg={3}>
                       <Card sx={{ backgroundColor: '#311b92', border: '1px solid #555' }}>
                         <CardContent>
-                          <Typography variant="subtitle1" gutterBottom>
-                            {mod.name}
-                          </Typography>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                            <Typography variant="subtitle1">
+                                {mod.name}
+                            </Typography>
+                            <Stack direction="row" spacing={1}>
+                                <IconButton onClick={() => handleEdit(mod)} sx={{ color: '#ffd54f' }}>
+                                <EditIcon />
+                                </IconButton>
+                                <IconButton onClick={() => handleDelete(mod.id)} sx={{ color: '#f44336' }}>
+                                <DeleteIcon />
+                                </IconButton>
+                            </Stack>
+                            </Box>
 
                           <Divider sx={{ borderColor: '#444', mb: 1 }} />
 
@@ -160,7 +230,80 @@ const ViewModulesPage = () => {
           </Accordion>
         );
       })}
+
+    <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
+    <DialogTitle>Edit Module</DialogTitle>
+    <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {editModule && (
+        <>
+            <TextField
+            label="Module Name"
+            value={editModule.name}
+            onChange={(e) => setEditModule({ ...editModule, name: e.target.value })}
+            fullWidth
+            />
+
+            {editModule.io_fields.map((io, index) => (
+            <Box key={index} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField
+                label="Unit"
+                value={io.unit}
+                onChange={(e) => {
+                    const updated = [...editModule.io_fields];
+                    updated[index].unit = e.target.value;
+                    setEditModule({ ...editModule, io_fields: updated });
+                }}
+                />
+                <TextField
+                label="Amount"
+                type="number"
+                value={io.amount}
+                onChange={(e) => {
+                    const updated = [...editModule.io_fields];
+                    updated[index].amount = parseFloat(e.target.value);
+                    setEditModule({ ...editModule, io_fields: updated });
+                }}
+                />
+                <FormControlLabel
+                control={
+                    <Checkbox
+                    checked={io.is_input}
+                    onChange={(e) => {
+                        const updated = [...editModule.io_fields];
+                        updated[index].is_input = e.target.checked;
+                        setEditModule({ ...editModule, io_fields: updated });
+                    }}
+                    />
+                }
+                label="Input"
+                />
+                <FormControlLabel
+                control={
+                    <Checkbox
+                    checked={io.is_output}
+                    onChange={(e) => {
+                        const updated = [...editModule.io_fields];
+                        updated[index].is_output = e.target.checked;
+                        setEditModule({ ...editModule, io_fields: updated });
+                    }}
+                    />
+                }
+                label="Output"
+                />
+            </Box>
+            ))}
+        </>
+        )}
+    </DialogContent>
+    <DialogActions>
+        <Button onClick={() => setEditOpen(false)}>Cancel</Button>
+        <Button onClick={handleEditSubmit} variant="contained" color="primary">Save</Button>
+    </DialogActions>
+    </Dialog>
+
     </Box>
+
+    
   );
 };
 
