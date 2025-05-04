@@ -159,14 +159,17 @@ def solve_placements(data: Dict):
     module_quantities = data.get('module_quantities', {})
     print("AAAAAAAAA", module_quantities)
     grid_dimensions = data.get('grid_dimensions', {})
+    current_modules = data.get('modules', {})
+    
     
     # Call the placement solver with the correct parameters
     print("MMMMMMMMMM", modules)
     result = solve_modules_placement_with_fixed(
         modules,
         specs,
-        module_quantities
-        )
+        module_quantities,
+        current_modules
+    )
     
     return result
 

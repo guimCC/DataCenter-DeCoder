@@ -27,6 +27,8 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SaveIcon from '@mui/icons-material/Save';
+import { Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 
 // *** IMPORT YOUR ACTUAL TYPES ***
 // Make sure this path points correctly to your types file (e.g., '../types')
@@ -689,15 +691,35 @@ const MainPage = () => {
       }
     
       // Extract the current state of all modules from the nodes
+      // Extract the grid dimensions
+      const gridWidth = parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols;
+      const gridHeight = parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows;
+
+      // Get only the modules inside the grid boundaries
       const currentModules = nodes
         .filter(node => node.type === 'moduleNode')
+        .filter(node => {
+          const mod = node.data.module;
+          const gridCol = mod.gridColumn || 0;
+          const gridRow = mod.gridRow || 0;
+          const width = mod.width || 1;
+          const height = mod.height || 1;
+          
+          // Check if module is completely inside the grid
+          return (
+            gridCol >= 1 &&
+            gridRow >= 1 &&
+            gridCol + width - 1 <= gridWidth &&
+            gridRow + height - 1 <= gridHeight
+          );
+        })
         .map(node => ({
           id: node.data.module.id,
           name: node.data.module.name,
           width: node.data.module.width,
           height: node.data.module.height,
-          gridColumn: node.data.module.gridColumn,
-          gridRow: node.data.module.gridRow,
+          gridColumn: node.data.module.gridColumn*CELL_SIZE,
+          gridRow: node.data.module.gridRow*CELL_SIZE,
           io_fields: node.data.module.io_fields || []
         }));
     

@@ -1,6 +1,6 @@
 {
     "id": 4,
-    "name": "Pedo_Server_Square",
+    "name": "UPC_Data_Center",
     "specs": [
       { "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "price", "Amount": 1000000 },
       { "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Unit": "grid_connection", "Amount": 3 },
