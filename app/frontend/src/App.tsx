@@ -30,7 +30,7 @@ function App() {
             <Button color="inherit" component={Link} to="/old">Old Page</Button>
             <Button color="inherit" component={Link} to="/add">Add Module</Button>
             <Button color="inherit" component={Link} to="/view">View Modules</Button>
-            <Button color="inherit" component={Link} to="/view">Gallery</Button>
+            <Button color="inherit" component={Link} to="/gallery">Gallery</Button>
           </Toolbar>
         </AppBar>
 
@@ -39,7 +39,7 @@ function App() {
             <Route path="/old" element={<OldMainPage />} />
             <Route path="/add" element={<AddModulePage />} />
             <Route path="/view" element={<ViewModulesPage />} />
-            <Route path="/view" element={<GalleryPage />} />
+            <Route path="/gallery" element={<GalleryPage />} />
           </Routes>
       </Router>
     </ThemeProvider>
