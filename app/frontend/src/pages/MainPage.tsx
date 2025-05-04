@@ -15,20 +15,66 @@ import ReactFlow, {
   Handle,            // Component for connection points (if used)
   Viewport,          // Type for viewport object
   ReactFlowInstance, // Import for type safety
+  NodeTypes
 } from 'reactflow';
 import 'reactflow/dist/style.css'; // Essential React Flow styles
 
+// --- Material UI Imports ---
 import {
-  Box, TextField, Typography, Button, Paper, MenuItem, Select, FormControl, InputLabel
-} from '@mui/material'; // Material UI components
+  Box, TextField, Typography, Button, Paper, MenuItem, Select, FormControl, InputLabel,
+  List, ListItem, ListItemText, Divider, LinearProgress, Tooltip, IconButton,
+  ListSubheader, SelectChangeEvent // Added missing MUI types
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 // *** IMPORT YOUR ACTUAL TYPES ***
 // Make sure this path points correctly to your types file (e.g., '../types')
 import { PositionedModule, DataCenter, Module, IOField, SpecRule } from '../types';
 
+// Types for the new Dynamic Constraints Panel
+export type ConstraintOperation = 'Minimize' | 'Maximize' | 'Below Value' | 'Above Value';
+
+export interface ActiveConstraint {
+  id: string; // Unique ID for React keys and removal
+  resource: Resource; // The name of the resource being constrained
+  type: 'INPUT' | 'OUTPUT'; // Determines available operations
+  operation: ConstraintOperation;
+  value: number; // Threshold for Below/Above, Weight for Min/Max
+}
+
+// Define the resource lists (can also be constants in MainPage.tsx)
+export const INPUT_RESOURCES = ['price', 'grid_connection', 'water_connection'] as const;
+export const OUTPUT_RESOURCES = ['external_network', 'data_storage', 'processing'] as const;
+
+export type InputResource = typeof INPUT_RESOURCES[number];
+export type OutputResource = typeof OUTPUT_RESOURCES[number];
+export type Resource = InputResource | OutputResource;
+
+// Mapping from user-facing resource names to internal IOField units
+// *** IMPORTANT: Adjust this map to match the EXACT 'unit' strings used in your Module's io_fields ***
+export const RESOURCE_UNIT_MAP: Record<Resource, string> = {
+  price: 'Price',            // Cost is usually an input characteristic
+  grid_connection: 'Power',  // Assuming grid connection represents Power INPUT
+  water_connection: 'Water', // Assuming water connection represents Water INPUT
+  external_network: 'Network', // Assuming external network is Network OUTPUT
+  data_storage: 'Storage',   // Assuming data storage is Storage OUTPUT
+  processing: 'Processing',  // Assuming processing is Processing OUTPUT
+};
+
+// Helper to determine if a resource is input or output based on our lists
+export function getResourceType(resource: Resource): 'INPUT' | 'OUTPUT' {
+  return (INPUT_RESOURCES as readonly string[]).includes(resource) ? 'INPUT' : 'OUTPUT';
+}
+
+// Helper to generate simple unique IDs for constraints and potentially nodes if needed differently
+function generateUniqueId(prefix: string = 'id'): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
 // --- Configuration Constants ---
 const CELL_SIZE = 10; // Pixel size of one grid cell for layout calculations
-const DEFAULT_GRID_DIMENSIONS = { rows: 100, cols: 200 }; // Fallback grid size if constraints missing
+const DEFAULT_GRID_DIMENSIONS = { rows: 100, cols: 100 }; // Fallback grid size if constraints missing
 const BOUNDARY_NODE_ID = 'grid-boundary-node'; // Unique ID for the boundary node
 
 // --- Module Styling Helpers (Defined Outside Component) ---
@@ -111,15 +157,336 @@ const nodeTypes = {
   boundaryNode: BoundaryNode,
 };
 
+// --- Constraints Panel Component ---
+// (Defined here for inclusion in the single file as requested)
+
+interface ConstraintsPanelProps {
+  activeConstraints: ActiveConstraint[];
+  resultModules: PositionedModule[]; // Needed to calculate current values
+  onAddConstraint: (constraint: Omit<ActiveConstraint, 'id' | 'type'>) => void; // Type is derived internally
+  onRemoveConstraint: (id: string) => void;
+}
+
+const ConstraintsPanel: React.FC<ConstraintsPanelProps> = ({
+  activeConstraints,
+  resultModules,
+  onAddConstraint,
+  onRemoveConstraint
+}) => {
+  // State for the 'Add Constraint' form
+  const [selectedResource, setSelectedResource] = useState<Resource | ''>('');
+  const [selectedOperation, setSelectedOperation] = useState<ConstraintOperation | ''>('');
+  const [constraintValue, setConstraintValue] = useState<string>('');
+
+  // --- Derived state ---
+  const resourceType = useMemo(() => selectedResource ? getResourceType(selectedResource) : null, [selectedResource]);
+  const availableOps = useMemo((): ConstraintOperation[] => {
+      if (resourceType === 'INPUT') return ['Minimize', 'Below Value'];
+      if (resourceType === 'OUTPUT') return ['Maximize', 'Above Value'];
+      return [];
+  }, [resourceType]);
+  const valueLabel = useMemo(() => {
+      if (selectedOperation === 'Minimize' || selectedOperation === 'Maximize') return 'Weight Factor';
+      if (selectedOperation === 'Below Value' || selectedOperation === 'Above Value') return 'Threshold Value';
+      return 'Value';
+  }, [selectedOperation]);
+  const showValueInput = selectedOperation !== '';
+  const isAddDisabled = !selectedResource || !selectedOperation || !constraintValue || isNaN(parseFloat(constraintValue));
+
+
+  // --- Helper Functions ---
+  const calculateCurrentValue = useCallback((resource: Resource, modules: PositionedModule[]): number => {
+      const targetUnit = RESOURCE_UNIT_MAP[resource];
+      const targetType = getResourceType(resource); // 'INPUT' or 'OUTPUT'
+      if (!targetUnit || !modules) return 0;
+
+      return modules.reduce((sum, mod) => {
+          const ioFields = Array.isArray(mod.io_fields) ? mod.io_fields : [];
+          const relevantField = ioFields.find(io => {
+              if (!io || io.unit !== targetUnit) return false;
+              // Match unit AND direction (Input/Output)
+              // Price is a special case, usually considered an input cost attribute, not output production
+              if (targetUnit === 'Price') return true; // Assume price is always relevant if matched unit
+              const isInputMatch = targetType === 'INPUT' && io.is_input;
+              const isOutputMatch = targetType === 'OUTPUT' && !io.is_input; // !is_input implies output
+              return isInputMatch || isOutputMatch;
+          });
+          return sum + (relevantField?.amount || 0);
+      }, 0);
+  }, []); // Depends only on static maps/types
+
+  const formatConstraintText = (constraint: ActiveConstraint): string => {
+      const opText = constraint.operation;
+      const valText = constraint.value.toLocaleString();
+      const resourceName = constraint.resource.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+      switch (opText) {
+          case 'Minimize': return `${resourceName}: Minimize (Weight: ${valText})`;
+          case 'Maximize': return `${resourceName}: Maximize (Weight: ${valText})`;
+          case 'Below Value': return `${resourceName}: ≤ ${valText}`; // Use symbols for brevity
+          case 'Above Value': return `${resourceName}: ≥ ${valText}`; // Use symbols for brevity
+          default: return `${resourceName}: ${opText} ${valText}`; // Fallback
+      }
+  };
+
+  const getConstraintStatus = useCallback((constraint: ActiveConstraint): { current: number; percentage: number | null; withinLimits: boolean | null; tooltip: string } => {
+      const current = calculateCurrentValue(constraint.resource, resultModules);
+      let percentage: number | null = null;
+      let withinLimits: boolean | null = null;
+      let tooltip = `Current ${constraint.resource.replace(/_/g, ' ')}: ${current.toLocaleString()}`;
+
+      if ((constraint.operation === 'Below Value' || constraint.operation === 'Above Value')) {
+           const targetValue = constraint.value;
+           tooltip += ` / ${constraint.operation === 'Below Value' ? 'Limit' : 'Target'}: ${targetValue.toLocaleString()}`;
+           if (targetValue > 0) {
+                // Calculate percentage relative to the target/limit
+                percentage = Math.min(100, Math.max(0, (current / targetValue) * 100));
+                withinLimits = constraint.operation === 'Below Value' ? current <= targetValue : current >= targetValue;
+           } else if (targetValue === 0 && constraint.operation === 'Below Value') {
+                // Special case: Below 0 means must be 0 or less
+                percentage = current <= 0 ? 0 : 100; // Show 0% if compliant, 100% if over
+                withinLimits = current <= 0;
+           } else if (targetValue === 0 && constraint.operation === 'Above Value') {
+                // Special case: Above 0 means must be 0 or more (usually always true for positive resources)
+                percentage = current >= 0 ? 100 : 0; // Show 100% if compliant, 0% if somehow negative
+                withinLimits = current >= 0;
+           }
+
+      } else if (constraint.operation === 'Minimize' || constraint.operation === 'Maximize') {
+          // For Min/Max, there's no simple progress bar or limit check, just show current value and weight
+          tooltip += ` (Weight: ${constraint.value.toLocaleString()})`;
+          // withinLimits remains null
+          // percentage remains null
+      }
+
+      return { current, percentage, withinLimits, tooltip };
+  }, [resultModules, calculateCurrentValue]); // Recalculate when modules change
+
+
+  // --- Event Handlers ---
+  const handleResourceChange = (event: SelectChangeEvent<Resource | ''>) => {
+      const newResource = event.target.value as Resource | '';
+      setSelectedResource(newResource);
+      setSelectedOperation(''); // Reset operation when resource changes
+      setConstraintValue('');   // Reset value
+  };
+
+  const handleOperationChange = (event: SelectChangeEvent<ConstraintOperation | ''>) => {
+      setSelectedOperation(event.target.value as ConstraintOperation | '');
+      // Keep value for now, user might be switching between similar ops like Below/Above
+  };
+
+  const handleValueChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      // Allow only numbers and a single decimal point
+      const value = event.target.value;
+      if (/^\d*\.?\d*$/.test(value)) { // Basic regex for positive numbers/decimals
+           setConstraintValue(value);
+      }
+  };
+
+  const handleAddClick = () => {
+      if (isAddDisabled || !selectedResource || !selectedOperation) return; // Redundant check, but safe
+
+      const valueNum = parseFloat(constraintValue); // Already checked !isNaN via isAddDisabled
+
+      // Call the callback passed from MainPage
+      onAddConstraint({
+          resource: selectedResource,
+          operation: selectedOperation,
+          value: valueNum,
+      });
+
+      // Reset form after adding
+      setSelectedResource('');
+      setSelectedOperation('');
+      setConstraintValue('');
+  };
+
+  // --- Render ---
+  return (
+      <Paper elevation={3} sx={{
+          p: 1.5, width: 280, // Fixed width
+          backgroundColor: 'rgba(32, 20, 52, 0.9)', // Dark theme background
+          position: 'absolute', left: 16, top: 16, // Position top-left
+          border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 2, zIndex: 10,
+          maxHeight: 'calc(100% - 32px)', // Prevent overflow
+          display: 'flex', flexDirection: 'column' // Allow vertical scrolling
+      }}>
+          <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold', mb: 1.5 }}>
+              Define Constraints
+          </Typography>
+
+          {/* --- Add Constraint Form --- */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
+              {/* Resource Selector */}
+              <FormControl size="small" fullWidth>
+                  <InputLabel id="resource-select-label" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Resource</InputLabel>
+                  <Select
+                      labelId="resource-select-label"
+                      value={selectedResource}
+                      label="Resource"
+                      onChange={handleResourceChange}
+                      sx={{ color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' }, '& .MuiSvgIcon-root': { color: 'rgba(255, 255, 255, 0.7)' } }}
+                      MenuProps={{ PaperProps: { sx: { bgcolor: '#332a4f', color: 'white', border: '1px solid rgba(255,255,255,0.2)', mt: 0.5 } } }}
+                  >
+                      <MenuItem value="" disabled><em>-- Select Resource --</em></MenuItem>
+                      <ListSubheader sx={{bgcolor: '#332a4f', color: 'rgba(255,255,255,0.6)', lineHeight: '24px', py:0.5}}>Input Resources</ListSubheader>
+                      {INPUT_RESOURCES.map(res => <MenuItem key={res} value={res}>{res.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</MenuItem>)}
+                       <ListSubheader sx={{bgcolor: '#332a4f', color: 'rgba(255,255,255,0.6)', lineHeight: '24px', py:0.5}}>Output Resources</ListSubheader>
+                      {OUTPUT_RESOURCES.map(res => <MenuItem key={res} value={res}>{res.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</MenuItem>)}
+                  </Select>
+              </FormControl>
+
+              {/* Operation Selector (conditional) */}
+              {resourceType && (
+                  <FormControl size="small" fullWidth disabled={!selectedResource}>
+                      <InputLabel id="operation-select-label" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Operation</InputLabel>
+                      <Select
+                          labelId="operation-select-label"
+                          value={selectedOperation}
+                          label="Operation"
+                          onChange={handleOperationChange}
+                          sx={{ color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' }, '& .MuiSvgIcon-root': { color: 'rgba(255, 255, 255, 0.7)' } }}
+                          MenuProps={{ PaperProps: { sx: { bgcolor: '#332a4f', color: 'white', border: '1px solid rgba(255,255,255,0.2)', mt: 0.5 } } }}
+                      >
+                         <MenuItem value="" disabled><em>-- Select Operation --</em></MenuItem>
+                          {availableOps.map(op => <MenuItem key={op} value={op}>{op}</MenuItem>)}
+                      </Select>
+                  </FormControl>
+              )}
+
+              {/* Value Input (conditional) */}
+              {showValueInput && (
+                  <TextField
+                      size="small"
+                      label={valueLabel}
+                      value={constraintValue}
+                      onChange={handleValueChange}
+                      type="text" // Use text for better control with regex
+                      inputMode='decimal' // Hint for mobile keyboards (decimal allows .)
+                      variant="outlined"
+                      fullWidth
+                      InputLabelProps={{ sx: { color: 'rgba(255, 255, 255, 0.7)' } }}
+                      InputProps={{ sx: { color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' } } }}
+                  />
+              )}
+
+              {/* Add Button */}
+              <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={handleAddClick}
+                  disabled={isAddDisabled} // Use calculated disabled state
+                  sx={{ alignSelf: 'flex-end' }} // Position to the right
+              >
+                  Add
+              </Button>
+          </Box>
+
+          <Divider sx={{ my: 1, borderColor: 'rgba(255, 255, 255, 0.2)' }} />
+
+          {/* --- Active Constraints List --- */}
+           <Typography variant="subtitle2" gutterBottom sx={{ color: 'rgba(255,255,255,0.8)', fontWeight: 'bold', mb: 1 }}>
+              Active Constraints ({activeConstraints.length})
+          </Typography>
+          {/* Scrollable container for the list */}
+          <Box sx={{ overflowY: 'auto', flexGrow: 1, pr: 0.5 }}> {/* Add padding right for scrollbar */}
+              <List dense disablePadding>
+                  {activeConstraints.length === 0 ? (
+                       <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)', fontStyle: 'italic', textAlign:'center', display:'block', py:2 }}>
+                           No constraints defined.
+                       </Typography>
+                  ) : (
+                      activeConstraints.map((constraint) => {
+                          const { current, percentage, withinLimits, tooltip } = getConstraintStatus(constraint);
+                          const showProgress = percentage !== null; // Show progress only for Below/Above
+                          const progressColor = withinLimits === null ? 'primary' : (withinLimits ? 'success' : 'error');
+
+                          return (
+                              <ListItem
+                                  key={constraint.id}
+                                  disableGutters
+                                  sx={{
+                                      display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+                                      mb: 1.5, p:0, position: 'relative' // Needed for absolute positioning delete icon
+                                  }}
+                              >
+                                  {/* Delete Button positioned top-right */}
+                                  <IconButton
+                                      edge="end"
+                                      aria-label={`delete constraint ${constraint.resource}`}
+                                      onClick={() => onRemoveConstraint(constraint.id)} // Call remove handler
+                                      size="small"
+                                      sx={{
+                                          position: 'absolute', top: -2, right: -4, // Adjust positioning
+                                          color: 'rgba(255,255,255,0.4)',
+                                          '&:hover': { color: '#f44336', backgroundColor: 'rgba(255, 0, 0, 0.1)' },
+                                           zIndex: 1 // Ensure it's above text
+                                      }}
+                                  >
+                                      <DeleteIcon fontSize="inherit" /> {/* Smaller icon */}
+                                  </IconButton>
+
+                                 <Tooltip title={tooltip} placement="top-start" arrow>
+                                      <ListItemText
+                                          primary={formatConstraintText(constraint)}
+                                          primaryTypographyProps={{ variant: 'body2', color: 'white', sx:{ mb: 0.5, pr: '24px'} }} // Padding right to avoid delete icon overlap
+                                          // Only show secondary if no progress bar (for Min/Max)
+                                          secondary={!showProgress && `Current: ${current.toLocaleString()}`}
+                                          secondaryTypographyProps={{ variant: 'caption', color: 'rgba(255, 255, 255, 0.7)' }}
+                                      />
+                                  </Tooltip>
+
+                                  {/* Progress Bar (conditional) */}
+                                  {showProgress && (
+                                      <Box sx={{ width: '100%', mt: 0.5 }}>
+                                          <LinearProgress
+                                              variant="determinate"
+                                              value={percentage ?? 0}
+                                              color={progressColor}
+                                              sx={{ height: 6, borderRadius: 3 }}
+                                          />
+                                      </Box>
+                                  )}
+                              </ListItem>
+                          );
+                      })
+                  )}
+              </List>
+          </Box>
+
+           {/* --- Optional: Static Overall Production Summary --- */}
+           {/* You might want to remove this if covered by constraints */}
+          {/* <Divider sx={{ mt: 'auto', mb: 1, borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+           <Typography variant="caption" gutterBottom sx={{ color: 'rgba(255,255,255,0.7)', fontWeight: 'medium', mb: 0.5 }}>
+              Overall Production
+          </Typography>
+           <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="caption" sx={{ color: 'white' }}>Processing:</Typography>
+              <Typography variant="caption" sx={{ color: '#ff9800', fontWeight:'bold' }}>
+                  {calculateCurrentValue('processing', resultModules).toLocaleString()}
+               </Typography>
+           </Box> */}
+           {/* Add others like Network, Storage etc. */}
+
+      </Paper>
+  );
+};
+
 
 // --- Main Page Component Definition ---
 const MainPage = () => {
   // --- State ---
+  const [gridInputCells, setGridInputCells] = useState({
+      x: DEFAULT_GRID_DIMENSIONS.cols.toString(),
+      y: DEFAULT_GRID_DIMENSIONS.rows.toString()
+  });
   const [constraints, setConstraints] = useState({ maxPrice: '', maxSpaceX: '', maxSpaceY: '' });
   const [datacenters, setDatacenters] = useState<DataCenter[]>([]);
   const [selectedDC, setSelectedDC] = useState<number | "">("");
   const [currentZoom, setCurrentZoom] = useState<number>(1);
   const [resultModules, setResultModules] = useState<PositionedModule[]>([]); // Canonical data
+  const [activeConstraints, setActiveConstraints] = useState<ActiveConstraint[]>([]); // State for dynamic constraints
 
   // RF State
   const [nodes, setNodes, onNodesChange] = useNodesState<ModuleNodeData | BoundaryNodeData>([]);
@@ -127,11 +494,16 @@ const MainPage = () => {
   const reactFlowInstance = useReactFlow<ModuleNodeData | BoundaryNodeData, Edge>();
 
   // Calculate grid dimensions
-  const gridPixelDimensions = useMemo(() => ({
-    width: (parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols) * CELL_SIZE,
-    height: (parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows) * CELL_SIZE,
-  }), [constraints.maxSpaceX, constraints.maxSpaceY, CELL_SIZE]); // Include CELL_SIZE
-
+  // Calculate grid dimensions IN PIXELS
+  const gridPixelDimensions = useMemo(() => {
+    const cols = parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols;
+    const rows = parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows;
+    return {
+        width: cols , // Multiply by CELL_SIZE to get pixels
+        height: rows , // Multiply by CELL_SIZE to get pixels
+    };
+    // Make sure CELL_SIZE is included in the dependency array if it could ever change dynamically
+  }, [constraints.maxSpaceX, constraints.maxSpaceY, CELL_SIZE]);
   // --- Effects ---
 
   // Fetch Datacenters on Mount
@@ -156,9 +528,9 @@ const MainPage = () => {
       const uniqueNodeId = `mod_${mod.id}_${index}`;
       if (usedIds.has(uniqueNodeId)) return;
       usedIds.add(uniqueNodeId);
-      const widthCells = mod.width ?? 1; const heightCells = mod.height ?? 1;
+      const widthCells = mod.width / CELL_SIZE; const heightCells = mod.height / CELL_SIZE;
       const widthPx = widthCells * CELL_SIZE; const heightPx = heightCells * CELL_SIZE;
-      const gridCol = mod.gridColumn ?? 1; const gridRow = mod.gridRow ?? 1;
+      const gridCol = mod.gridColumn / CELL_SIZE + 1; const gridRow = mod.gridRow / CELL_SIZE + 1;
       const initialPosX = (gridCol - 1) * CELL_SIZE; const initialPosY = (gridRow - 1) * CELL_SIZE;
       moduleNodes.push({
         id: uniqueNodeId, type: 'moduleNode', position: { x: initialPosX, y: initialPosY },
@@ -234,30 +606,105 @@ const MainPage = () => {
     setConstraints(prev => ({ ...prev, [field]: value.replace(/[^0-9.]/g, '') }));
   };
 
-  const handleDesign = () => {
-    console.log("Handling Design button click...");
-    fetch("http://localhost:8000/solve-dummy", { // Replace with your solve endpoint
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ constraints: { price: parseFloat(constraints.maxPrice) || 0, space_x: parseFloat(constraints.maxSpaceX) || 0, space_y: parseFloat(constraints.maxSpaceY) || 0, } })
-    })
-    .then(res => { if (!res.ok) throw new Error(`Solve error: ${res.status}`); return res.json(); })
-    .then((data: { modules?: PositionedModule[] }) => {
-        const modules = data?.modules || [];
-        const processedModules: PositionedModule[] = modules
-            .filter(m => m != null && m.id != null)
-            .map((m, index) => ({
-                ...m, id: `design_${m.id}_${index}`,
-                gridColumn:  Math.floor(m.gridColumn / CELL_SIZE) + 1, gridRow:  Math.floor(m.gridRow / CELL_SIZE) + 1,
-                width:  Math.floor(m.width / CELL_SIZE), height:  Math.floor(m.height / CELL_SIZE), io_fields: m.io_fields ?? [],
-            }));
-        setResultModules(processedModules);
-    })
-    .catch(err => console.error("Design fetch/process failed:", err));
-  };
+  // Handler for Adding a Constraint (called by ConstraintsPanel)
+  const handleAddConstraint = useCallback((constraintData: Omit<ActiveConstraint, 'id' | 'type'>) => {
+    const newConstraint: ActiveConstraint = {
+        ...constraintData,
+        id: generateUniqueId('constraint'), // Generate unique ID
+        type: getResourceType(constraintData.resource), // Determine type based on resource
+    };
+      setActiveConstraints(prev => [...prev, newConstraint]);
+      console.log("Added Constraint:", newConstraint);
+  }, []); // Stable function identity
+
+  // Handler for Removing a Constraint (called by ConstraintsPanel)
+  const handleRemoveConstraint = useCallback((idToRemove: string) => {
+        setActiveConstraints(prev => prev.filter(c => c.id !== idToRemove));
+        console.log("Removed Constraint ID:", idToRemove);
+    }, []); // Stable function identity
+    
+    // Handler for the "Design" Button
+    const handleDesign = useCallback(() => {
+      console.log("Handling Design button click...");
+      // *** Prepare payload for the backend solver ***
+      // This needs to align EXACTLY with what your backend expects.
+      const solvePayload = {
+          // Send the dynamic constraints array
+          constraints: activeConstraints.map(c => ({
+              resource: c.resource, // e.g., 'price', 'processing'
+              unit: RESOURCE_UNIT_MAP[c.resource], // Send the unit string backend understands
+              operation: c.operation, // 'Minimize', 'Maximize', 'Below Value', 'Above Value'
+              value: c.value,         // The threshold or weight
+              type: c.type,           // 'INPUT' or 'OUTPUT' (optional, backend might infer)
+          })),
+          // Send grid dimensions in CELLS
+          grid_dimensions: {
+              cols: parseInt(gridInputCells.x) || DEFAULT_GRID_DIMENSIONS.cols,
+              rows: parseInt(gridInputCells.y) || DEFAULT_GRID_DIMENSIONS.rows,
+          },
+          // You might also need to send available module types, base costs etc.
+          // available_modules: [...]
+      };
+      console.log("Sending to /solve:", JSON.stringify(solvePayload, null, 2)); // Pretty print payload
+
+      // ** Replace with your actual backend endpoint **
+      fetch("http://localhost:8000/solve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(solvePayload)
+      })
+      .then(res => {
+          if (!res.ok) {
+              // Try to get error message from backend response body
+              return res.text().then(text => { throw new Error(`Solve request failed: ${res.status} - ${text || 'No error details'}`) });
+          }
+          return res.json();
+      })
+      .then((data: { modules?: PositionedModule[] }) => { // Expect backend to return PositionedModule array
+          const modules = data?.modules || [];
+          console.log(`Received ${modules.length} modules from solver.`);
+
+          // Process received modules: Ensure they have unique instance IDs
+          const processedModules: PositionedModule[] = modules
+              .filter(m => m != null && m.id != null && m.gridColumn != null && m.gridRow != null && m.width != null && m.height != null)
+              .map((m, index) => ({
+                  ...m,
+                  // Generate a unique instance ID for each module placement from the design result
+                  instanceId: generateUniqueId(`design_${m.id}_${index}`),
+                  // Ensure coordinate properties are numbers (backend might send strings)
+                  gridColumn: Number(m.gridColumn),
+                  gridRow: Number(m.gridRow),
+                  width: Number(m.width),
+                  height: Number(m.height),
+                  io_fields: m.io_fields ?? [], // Ensure io_fields exists
+              }));
+
+          // Validate modules against grid boundaries (optional, backend should ideally handle this)
+          const gridCols = parseInt(gridInputCells.x) || 0;
+          const gridRows = parseInt(gridInputCells.y) || 0;
+          const validModules = processedModules.filter(mod => {
+              const gCol = mod.gridColumn; const gRow = mod.gridRow;
+              const w = mod.width; const h = mod.height;
+              const fits = gCol >= 1 && gRow >= 1 && (gCol + w - 1) <= gridCols && (gRow + h - 1) <= gridRows;
+              if (!fits) console.warn(`Solver returned module outside grid bounds: ${mod.instanceId} at (${gCol},${gRow}) size (${w},${h})`);
+              return fits;
+          });
+
+          setResultModules(validModules); // Update the canonical state
+          setActiveConstraints([]); // Optionally clear constraints after a design run? Or keep them? Decide based on workflow.
+          console.log("Updated resultModules state with valid modules:", validModules.length);
+      })
+      .catch(err => {
+          console.error("Design request or processing failed:", err);
+          // TODO: Show user feedback (e.g., snackbar notification)
+      });
+    }, [activeConstraints, gridInputCells.x, gridInputCells.y]); // Dependencies for the handler
 
   const handleDCSelect = (dcId: number | "") => {
     console.log(`Handling DC Select change: ${dcId}`);
     setSelectedDC(dcId);
+    setActiveConstraints([]); // Clear dynamic constraints when loading a DC
+
     if (dcId === "") { setResultModules([]); setConstraints({ maxPrice: '', maxSpaceX: '', maxSpaceY: ''}); return; }
     const selected: DataCenter | undefined = datacenters.find(dc => dc.id === dcId);
     if (selected) {
@@ -441,14 +888,28 @@ const MainPage = () => {
         {resultModules.length > 0 && ModuleLegendElement}
         {resultModules.length > 0 && ConstraintsPanelElement}
 
-        {/* Bottom Status Bar */}
-        <Box sx={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 10, padding: '4px 12px', bgcolor: 'rgba(0,0,0,0.75)', color: 'rgba(255,255,255,0.8)', borderRadius: 1, fontSize: '0.75rem', display: 'flex', gap: 2, alignItems: 'center', whiteSpace: 'nowrap' }}>
-           <Typography variant="caption">Grid: {constraints.maxSpaceX || '?'}×{constraints.maxSpaceY || '?'} Cells</Typography>
-           <Typography variant="caption" sx={{color: 'rgba(255,255,255,0.4)'}}>|</Typography>
-           <Typography variant="caption">Zoom: {(currentZoom ?? 1).toFixed(2)}x</Typography>
-           <Typography variant="caption" sx={{color: 'rgba(255,255,255,0.4)'}}>|</Typography>
-           <Typography variant="caption">Nodes: {nodes.filter(n => n.id !== BOUNDARY_NODE_ID).length}</Typography>
-        </Box>
+        {/* Constraints Panel (Left Side) */}
+        <ConstraintsPanel
+            activeConstraints={activeConstraints}
+            resultModules={resultModules}
+            onAddConstraint={handleAddConstraint}
+            onRemoveConstraint={handleRemoveConstraint}
+        />
+
+    <Box sx={{
+                position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)',
+                zIndex: 10, padding: '4px 12px', bgcolor: 'rgba(0,0,0,0.7)',
+                color: 'rgba(255,255,255,0.8)', borderRadius: '4px', fontSize: '0.75rem',
+                display: 'flex', gap: 2, alignItems: 'center', whiteSpace: 'nowrap'
+            }}>
+      <Typography variant="caption">Grid: {gridInputCells.x || '?'}×{gridInputCells.y || '?'} Cells</Typography>
+      <Typography variant="caption" sx={{color: 'rgba(255,255,255,0.4)'}}>|</Typography>
+      <Typography variant="caption">Zoom: {currentZoom.toFixed(2)}x</Typography>
+      <Typography variant="caption" sx={{color: 'rgba(255,255,255,0.4)'}}>|</Typography>
+      <Typography variant="caption">Modules: {nodes.filter(n => n.type === 'moduleNode').length}</Typography>
+      <Typography variant="caption" sx={{color: 'rgba(255,255,255,0.4)'}}>|</Typography>
+      <Typography variant="caption">Constraints: {activeConstraints.length}</Typography>
+    </Box>
       </Box>
     </Box>
   );
