@@ -256,8 +256,9 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict, i
     # --- 6. Define Constraints ---
     # Area Constraint (if not minimizing and limit > 0)
     if not minimize_area and total_area_limit > 0:
-        prob += area_expr <= total_area_limit, "TotalAreaConstraint"
-        print(f"Constraint Added: Total Area <= {total_area_limit}")
+        safe_area_limit = 0.9 * total_area_limit
+        prob += area_expr <= safe_area_limit, "TotalAreaConstraint"
+        print(f"Constraint Added: Total Area <= {safe_area_limit:.2f} (90% of {total_area_limit})")
 
     # Resource Constraints from Specs
     constraints_added = 0
