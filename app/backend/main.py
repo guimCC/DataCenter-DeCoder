@@ -151,9 +151,24 @@ async def solve_components_with_fixed_modules(specs, weights, fixed_modules: lis
 
 # POST: solve problem for the placements of the modules of module_list, possibly with fixed_modules
 @app.post('/solve-placements')
-def solve_placements(specs, module_list, fixed_modules: list[Module]):
-    modules = get_modules()
-    return _solve_module_placement(modules, specs, module_list)
+def solve_placements(data: Dict):
+    # No need to use json.loads on data - FastAPI already deserializes it
+    # Extract the required data from the request
+    modules = get_modules() 
+    specs = data.get('specs', [])
+    module_quantities = data.get('module_quantities', {})
+    print("AAAAAAAAA", module_quantities)
+    grid_dimensions = data.get('grid_dimensions', {})
+    
+    # Call the placement solver with the correct parameters
+    print("MMMMMMMMMM", modules)
+    result = solve_modules_placement_with_fixed(
+        modules,
+        specs,
+        module_quantities
+        )
+    
+    return result
 
 
 # DELETE: delete a module

@@ -58,35 +58,35 @@ def _solve_module_placement(modules: list[Module], specs: list[dict], selected_m
     # Process module data
     module_data = {}
     for mod in modules:
-        mod_id = mod.id
+        mod_id = mod["id"]
         inputs = {}
         outputs = {}
         mod_width = 0
         mod_height = 0
 
         # Process IO fields to extract needed information
-        for field in mod.io_fields:
-            unit = standardize_unit_name(field.unit)
-            amount = field.amount
+        for field in mod["io_fields"]:
+            unit = standardize_unit_name(field["unit"])
+            amount = field["amount"]
 
-            if unit == 'space_x' and field.is_input:
+            if unit == 'space_x' and field["is_input"]:
                 try:
                     mod_width = int(amount) if amount else 0
                 except (ValueError, TypeError):
                     mod_width = 0
-            elif unit == 'space_y' and field.is_input:
+            elif unit == 'space_y' and field["is_input"]:
                 try:
                     mod_height = int(amount) if amount else 0
                 except (ValueError, TypeError):
                     mod_height = 0
 
-            if field.is_input:
+            if field["is_input"]:
                 inputs[unit] = amount
-            if field.is_output:
+            if field["is_output"]:
                 outputs[unit] = amount
 
         module_data[mod_id] = {
-            "name": mod.name,
+            "name": mod["name"],
             "inputs": inputs,
             "outputs": outputs,
             "width": mod_width,
@@ -139,8 +139,8 @@ def _solve_module_placement(modules: list[Module], specs: list[dict], selected_m
     formatted_modules = []
     for module in placed_modules:
         # Find the original Module object to get io_fields if needed, or keep empty
-        original_module = next((m for m in modules if m.id == module['id']), None)
-        io_fields_data = original_module.io_fields if original_module else [] # Or format io_fields if required
+        original_module = next((m for m in modules if m["id"] == module['id']), None)
+        io_fields_data = original_module["io_fields"] if original_module else [] # Or format io_fields if required
 
         formatted_modules.append({
             "id": module['id'],
@@ -201,7 +201,10 @@ class FastClusteredPlacement:
         self.clusters_by_type = defaultdict(list)
 
         # Group modules by type and calculate centroids for faster access
+        
+        print("SSSSSSSSSSS", selected_modules)
         for module_id, count in selected_modules.items():
+            module_id = int(module_id)
             if module_id not in module_data:
                 print(f"Warning: Module ID {module_id} not found in module_data. Skipping.")
                 continue
@@ -602,7 +605,7 @@ def solve_modules_placement_with_fixed(modules: list[Module], specs: list[dict],
     fixed_module_ids = defaultdict(int)
 
     # Store original io_fields for detail calculation later
-    module_io_map = {m.id: m.io_fields for m in modules}
+    module_io_map = {m["id"]: m["io_fields"] for m in modules}
 
     for fixed_mod in modules_with_position:
         try:
@@ -694,23 +697,23 @@ def solve_modules_placement_with_fixed(modules: list[Module], specs: list[dict],
         inputs = {}
         outputs = {}
         for field in io_fields:
-            unit = standardize_unit_name(field.unit)
-            if field.is_input: inputs[unit] = field.amount
-            if field.is_output: outputs[unit] = field.amount
+            unit = standardize_unit_name(field["unit"])
+            if field["is_input"]: inputs[unit] = field["amount"]
+            if field["is_output"]: outputs[unit] = field["amount"]
         all_placed_modules_data.append({'id': fixed_mod['id'], 'inputs': inputs, 'outputs': outputs})
 
     # Get data for dynamically placed modules (already processed in _solve_module_placement)
     # We need the internal representation used there, or re-process io_fields
-    module_data_map = {m.id: m for m in modules}
+    module_data_map = {m["id"]: m for m in modules}
     for placed_mod in placement_result.get("modules", [])[len(formatted_fixed_modules):]: # Only iterate dynamically placed ones
         original_module = module_data_map.get(placed_mod['id'])
         if original_module:
             inputs = {}
             outputs = {}
-            for field in original_module.io_fields:
-                unit = standardize_unit_name(field.unit)
-                if field.is_input: inputs[unit] = field.amount
-                if field.is_output: outputs[unit] = field.amount
+            for field in original_module["io_fields"]:
+                unit = standardize_unit_name(field["unit"])
+                if field["is_input"]: inputs[unit] = field["amount"]
+                if field["is_output"]: outputs[unit] = field["amount"]
             all_placed_modules_data.append({'id': placed_mod['id'], 'inputs': inputs, 'outputs': outputs})
 
 
