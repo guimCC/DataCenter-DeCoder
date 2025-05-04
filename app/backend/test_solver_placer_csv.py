@@ -6,7 +6,7 @@ import numpy as np
 from collections import defaultdict
 
 from solver_utils_list import _solve_module_list
-from solver_utils_placement import solve_module_placement
+from solver_utils_placement import _solve_module_placement
 from models import Module, IOField
 
 # --- Visualization Function ---
@@ -222,7 +222,7 @@ def test_spec_placement(spec_id):
 
     # --- 5. Run Module Placement ---
     print("\n--- Running Module Placement ---")
-    placement_result = solve_module_placement(available_modules, specs, weights, selected_counts)
+    placement_result = _solve_module_placement(available_modules, specs, weights, selected_counts)
 
     if "error" in placement_result:
         print(f"Placement error: {placement_result['error']}")
