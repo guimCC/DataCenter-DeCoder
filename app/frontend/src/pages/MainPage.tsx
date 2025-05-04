@@ -166,6 +166,7 @@ interface ConstraintsPanelProps {
   onAddConstraint: (constraint: Omit<ActiveConstraint, 'id' | 'type'>) => void; // Type is derived internally
   onRemoveConstraint: (id: string) => void;
   onDesign: () => void; // Optional: Callback to trigger design action
+  onRefine?: () => void;
 }
 
 const ConstraintsPanel: React.FC<ConstraintsPanelProps> = ({
@@ -173,7 +174,8 @@ const ConstraintsPanel: React.FC<ConstraintsPanelProps> = ({
   resultModules,
   onAddConstraint,
   onRemoveConstraint,
-  onDesign
+  onDesign,
+  onRefine
 }) => {
   // State for the 'Add Constraint' form
   const [selectedResource, setSelectedResource] = useState<Resource | ''>('');
@@ -473,6 +475,24 @@ const ConstraintsPanel: React.FC<ConstraintsPanelProps> = ({
               Design DataCenter
           </Button>
 
+          {/* Add Refine button */}
+          {onRefine && (
+              <Button 
+                  size="large" 
+                  variant="outlined" 
+                  onClick={onRefine}
+                  sx={{ 
+                      mt: 1, // Space from the Design button
+                      borderColor: '#9c27b0',
+                      color: '#9c27b0',
+                      '&:hover': { borderColor: '#7b1fa2', backgroundColor: 'rgba(156, 39, 176, 0.08)' },
+                      fontWeight: 'bold'
+                  }}
+              >
+                  Refine Design
+              </Button>
+          )}
+
       </Paper>
   );
 };
@@ -491,6 +511,19 @@ const MainPage = () => {
   const [currentZoom, setCurrentZoom] = useState<number>(1);
   const [resultModules, setResultModules] = useState<PositionedModule[]>([]); // Canonical data
   const [activeConstraints, setActiveConstraints] = useState<ActiveConstraint[]>([]); // State for dynamic constraints
+  const [rawSolution, setRawSolution] = useState<{
+        modules: Record<string, number>; // Dictionary of module IDs to quantities
+        states: Record<string, any>;    // Solver state information
+        specs: Array<{
+            Unit: string;
+            Below_Amount: number;
+            Above_Amount: number;
+            Minimize: number;
+            Maximize: number;
+            Unconstrained: number;
+            Amount: number | null;
+        }>;
+    } | null>(null);
 
   // RF State
   const [nodes, setNodes, onNodesChange] = useNodesState<ModuleNodeData | BoundaryNodeData>([]);
@@ -649,14 +682,103 @@ const MainPage = () => {
     }, [CELL_SIZE]);
 
     const refineDesign = useCallback(() => {
-      // Use the stored raw solution
-      const refinementData = {
-        initial_solution: rawSolution,
-        modifications: {
-          // Any modifications made by the user
+      // Only proceed if we have a raw solution
+      if (!rawSolution) {
+        alert("No initial solution available to refine.");
+        return;
+      }
+    
+      // Extract the current state of all modules from the nodes
+      const currentModules = nodes
+        .filter(node => node.type === 'moduleNode')
+        .map(node => ({
+          id: node.data.module.id,
+          name: node.data.module.name,
+          width: node.data.module.width,
+          height: node.data.module.height,
+          gridColumn: node.data.module.gridColumn,
+          gridRow: node.data.module.gridRow,
+          io_fields: node.data.module.io_fields || []
+        }));
+    
+      if (currentModules.length === 0) {
+        alert("No modules to refine. Place some modules first.");
+        return;
+      }
+    
+      // Build the data object for the backend
+      const placementData = {
+        modules: currentModules,  // Current state of modules with positions
+        specs: rawSolution.specs,  // Use original constraints
+        module_quantities: rawSolution.modules,  // Original module quantities
+        grid_dimensions: {
+          width: parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols,
+          height: parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows
         }
       };
-      
+    
+      console.log("Sending data to solve-placements:", placementData);
+      setIsLoading(true);
+    
+      // Send request to the backend
+      fetch("http://localhost:8000/solve-placements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(placementData)
+      })
+      .then(res => {
+        if (!res.ok) {
+          return res.text().then(text => {
+            throw new Error(`Error ${res.status}: ${text}`);
+          });
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data && data.modules) {
+          // Process the returned modules with new positions
+          const refinedModules: PositionedModule[] = data.modules
+            .map((m: any) => ({
+              id: m.id,
+              name: m.name,
+              instanceId: m.instanceId || generateUniqueId(`refined_${m.id}`), 
+              gridColumn: Number(m.gridColumn || 1),
+              gridRow: Number(m.gridRow || 1),
+              width: Number(m.width || 1),
+              height: Number(m.height || 1),
+              io_fields: m.io_fields || []
+            }));
+            
+          setResultModules(refinedModules);
+          
+          // Create React Flow nodes from the refined modules
+          const newNodes = createNodesFromModules(refinedModules);
+          setNodes(newNodes);
+          
+          // Update the raw solution if returned
+          if (data.raw_solution) {
+            setRawSolution(data.raw_solution);
+          }
+    
+          // Auto-fit view to show all modules
+          setTimeout(() => {
+            reactFlowInstance.fitView({ padding: 0.2 });
+          }, 100);
+        } else {
+          console.error("Invalid response from solver:", data);
+          alert("The solver returned an invalid response. Check the console for details.");
+        }
+      })
+      .catch(err => {
+        console.error("Error in refinement process:", err);
+        alert(`Design refinement failed: ${err.message}`);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+    }, [rawSolution, nodes, constraints, DEFAULT_GRID_DIMENSIONS, generateUniqueId, createNodesFromModules, reactFlowInstance]);
+    
+    
     // Handler for the "Design" Button
     const handleDesign = useCallback(() => {
       console.log("Handling Design button click...");
@@ -1063,6 +1185,7 @@ const MainPage = () => {
             onAddConstraint={handleAddConstraint}
             onRemoveConstraint={handleRemoveConstraint}
             onDesign={handleDesign}
+            onRefine={refineDesign} 
         />
 
     <Box sx={{
