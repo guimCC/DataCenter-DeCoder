@@ -13,23 +13,18 @@ INTERNAL_RESOURCES = ['usable_power', 'fresh_water', 'distilled_water', 'chilled
 DIMENSION_RESOURCES = ['space_x', 'space_y']
 
 
-def solve_module_placement(modules: list[Module], specs: list[dict], selected_modules_counts: dict) -> dict:
+def solve_module_placement(modules: list[Module], specs: list[dict], weights: dict, selected_modules_counts: dict) -> dict:
     """
     Places modules in a datacenter grid using a clustered approach.
     
     Args:
         modules (list[Module]): List of available Module objects
         specs (list[dict]): List of specifications for the datacenter
-        weights (dict): Dictionary with weights for objectives (not used directly for placement)
+        weights (dict): Dictionary with weights for objectives
         selected_modules_counts (dict): Dictionary with module_id -> count mapping
         
     Returns:
-        dict: A dictionary containing:
-            - placed_modules (list): List of module placement data
-            - grid (list): 2D grid representation of the datacenter
-            - width (int): Width of the datacenter
-            - height (int): Height of the datacenter
-            - placement_score (float): Score representing placement quality
+        dict: A dictionary containing datacenter configuration including placed modules
     """
     print(f"--- Starting Module Placement ---")
     start_time = time.time()
@@ -37,7 +32,10 @@ def solve_module_placement(modules: list[Module], specs: list[dict], selected_mo
     # Extract datacenter dimensions from specs
     datacenter_width = None
     datacenter_height = None
+    datacenter_id = 1  # Default ID if not specified
+    datacenter_name = "Datacenter Configuration"  # Default name
     
+    # Extract dimensions from specs
     for rule in specs:
         unit = standardize_unit_name(rule.get('Unit'))
         if unit == 'space_x' and rule.get('Below_Amount') == 1:
@@ -102,22 +100,66 @@ def solve_module_placement(modules: list[Module], specs: list[dict], selected_mo
     
     placed_modules, grid = placement.run()
     
-    # Convert numpy grid to list for JSON serialization
-    grid_list = grid.tolist() if isinstance(grid, np.ndarray) else grid
+    # Calculate total resources
+    details = {}
     
-    placement_result = {
-        "placed_modules": placed_modules,
-        "grid": grid_list,
-        "width": datacenter_width,
-        "height": datacenter_height,
-        "placement_score": placement.placement_score
+    # Initialize with any initial resources from specs
+    for spec in specs:
+        unit = standardize_unit_name(spec.get('Unit'))
+        if unit not in DIMENSION_RESOURCES:  # Skip dimensions
+            # Initialize resource values based on constraints
+            if spec.get('Above_Amount') == 1 and spec.get('Amount') is not None:
+                details[unit] = spec.get('Amount')
+    
+    # Add module contributions to resources
+    for module in placed_modules:
+        # Add inputs (consumed resources)
+        for unit, amount in module.get('inputs', {}).items():
+            if unit not in DIMENSION_RESOURCES:  # Skip dimensions
+                if unit not in details:
+                    details[unit] = 0
+                # For inputs like price, we subtract from the total
+                if unit in INPUT_RESOURCES:
+                    details[unit] -= float(amount) if amount is not None else 0
+        
+        # Add outputs (produced resources)
+        for unit, amount in module.get('outputs', {}).items():
+            if unit not in details:
+                details[unit] = 0
+            details[unit] += float(amount) if amount is not None else 0
+    
+    # Make sure all resource values are positive for inputs
+    for unit in INPUT_RESOURCES:
+        if unit in details:
+            details[unit] = abs(details[unit])
+    
+    # Format modules for return
+    formatted_modules = []
+    for module in placed_modules:
+        formatted_modules.append({
+            "id": module['id'],
+            "name": module['name'],
+            "io_fields": [],  # Empty array as per required format
+            "gridColumn": module['x'],
+            "gridRow": module['y'],
+            "width": module['width'],
+            "height": module['height']
+        })
+    
+    # Build the final response object
+    result = {
+        "id": datacenter_id,
+        "name": datacenter_name,
+        "specs": specs,
+        "details": details,
+        "modules": formatted_modules
     }
     
     print(f"Placement completed in {time.time() - start_time:.2f} seconds")
     print(f"Successfully placed {len(placed_modules)} modules")
     print(f"Placement score: {placement.placement_score:.4f}")
     
-    return placement_result
+    return result
 
 
 class FastClusteredPlacement:
@@ -456,3 +498,96 @@ class FastClusteredPlacement:
         # Combined score
         self.placement_score = 0.4 * compactness + 0.6 * clustering_score
         print(f"Compactness: {compactness:.4f}, Clustering: {clustering_score:.4f}")
+
+def validate_placement_output(result):
+    """
+    Validates that the placement output matches the expected format.
+    Returns a tuple of (is_valid, error_message).
+    """
+    # Check top-level structure
+    required_keys = ["id", "name", "specs", "details", "modules"]
+    missing_keys = [key for key in required_keys if key not in result]
+    if missing_keys:
+        return False, f"Missing required top-level keys: {missing_keys}"
+    
+    # Check module structure
+    if not isinstance(result["modules"], list):
+        return False, "Modules should be a list"
+    
+    if not result["modules"]:
+        return True, "Warning: No modules were placed"
+    
+    # Check first module structure
+    required_module_keys = ["id", "name", "io_fields", "gridColumn", "gridRow", "width", "height"]
+    first_module = result["modules"][0]
+    missing_module_keys = [key for key in required_module_keys if key not in first_module]
+    if missing_module_keys:
+        return False, f"Module is missing required keys: {missing_module_keys}"
+    
+    # Check details structure
+    if not isinstance(result["details"], dict):
+        return False, "Details should be a dictionary"
+    
+    # All checks passed
+    return True, "Output format is valid"
+
+import json
+from solver_utils_placement import solve_module_placement, validate_placement_output
+from models import Module, IOField
+
+def test_placement_output():
+    # Create test modules
+    test_modules = [
+        Module(
+            id=1,
+            name="Test Module",
+            io_fields=[
+                IOField(is_input=True, is_output=False, unit="space_x", amount=2),
+                IOField(is_input=True, is_output=False, unit="space_y", amount=2),
+                IOField(is_input=False, is_output=True, unit="processing", amount=100)
+            ]
+        ),
+        Module(
+            id=2,
+            name="Network Module",
+            io_fields=[
+                IOField(is_input=True, is_output=False, unit="space_x", amount=1),
+                IOField(is_input=True, is_output=False, unit="space_y", amount=1),
+                IOField(is_input=False, is_output=True, unit="external_network", amount=50)
+            ]
+        )
+    ]
+    
+    # Create specs similar to your example
+    test_specs = [
+        {"Unit": "space_x", "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Amount": 100},
+        {"Unit": "space_y", "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Amount": 50},
+        {"Unit": "price", "Below_Amount": 1, "Above_Amount": 0, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Amount": 1000000},
+        {"Unit": "data_storage", "Below_Amount": 0, "Above_Amount": 1, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Amount": 1000},
+        {"Unit": "processing", "Below_Amount": 0, "Above_Amount": 1, "Minimize": 0, "Maximize": 0, "Unconstrained": 0, "Amount": 1000},
+        {"Unit": "external_network", "Below_Amount": 0, "Above_Amount": 0, "Minimize": 0, "Maximize": 1, "Unconstrained": 0, "Amount": -1}
+    ]
+    
+    # Weights
+    test_weights = {"processing": 1.0, "external_network": 1.5, "data_storage": 0.8}
+    
+    # Selected modules - add more to better match your example
+    test_selected = {1: 5, 2: 3}  # 5 instances of module ID 1, 3 instances of module ID 2
+    
+    # Call the placement function
+    result = solve_module_placement(test_modules, test_specs, test_weights, test_selected)
+    
+    # Validate the output
+    is_valid, message = validate_placement_output(result)
+    print(f"Validation result: {is_valid}")
+    print(f"Message: {message}")
+    
+    # Print the complete output as formatted JSON
+    print("\n=== COMPLETE OUTPUT ===")
+    print(json.dumps(result, indent=2))
+    
+    return result
+
+# Run the test
+if __name__ == "__main__":
+    output = test_placement_output()
