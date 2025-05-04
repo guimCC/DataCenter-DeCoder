@@ -13,7 +13,7 @@ INTERNAL_RESOURCES = ['usable_power', 'fresh_water', 'distilled_water', 'chilled
 DIMENSION_RESOURCES = ['space_x', 'space_y']
 
 
-def solve_module_placement(modules: list[Module], specs: list[dict], weights: dict, selected_modules_counts: dict) -> dict:
+def solve_module_placement(modules: list[Module], specs: list[dict], selected_modules_counts: dict) -> dict:
     """
     Places modules in a datacenter grid using a clustered approach.
     
