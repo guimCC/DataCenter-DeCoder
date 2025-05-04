@@ -1231,6 +1231,17 @@ const MainPage = () => {
     if (viewport && typeof viewport.zoom === 'number') { setCurrentZoom(viewport.zoom); }
   }, []);
 
+  const handleClearModules = useCallback(() => {
+    // Clear the modules
+    setResultModules([]);
+    
+    // Clear React Flow nodes (except boundary node)
+    setNodes(nodes => nodes.filter(node => node.id === BOUNDARY_NODE_ID));
+    
+    // You might also want to reset rawSolution if needed
+    setRawSolution(null);
+  }, [setNodes, setResultModules]);
+
   // --- Memoized UI Elements ---
   const ModuleLegendElement = useMemo(() => {
      const moduleTypes = [
@@ -1455,6 +1466,23 @@ const MainPage = () => {
             }}
           >
             Save DataCenter
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={handleClearModules}
+            sx={{ 
+              color: '#ff5252', 
+              borderColor: 'rgba(255, 82, 82, 0.5)',
+              '&:hover': { 
+                borderColor: '#ff5252', 
+                backgroundColor: 'rgba(255, 82, 82, 0.08)' 
+              },
+              height: 40,
+              ml: 1 // margin left to separate from Save button
+            }}
+          >
+            Clear Modules
           </Button>
           {/* Add the dialog at the end of the component, right before the closing Box tag */}
           <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)}>
