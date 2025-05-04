@@ -1,139 +1,122 @@
 # DataCenter-DeCoder
-The project is in collaboration with Siemens Energy, who provided us with detailed information about various modules—such as transformers, water supply units, and processors. Each module has several inputs and outputs, which are associated with specific units.
 
-**Here’s an example of the module data:**
+<div align="center">
+  <img src="https://raw.githubusercontent.com/username/DataCenter-DeCoder/main/docs/logo.png" alt="DataCenter-DeCoder Logo" width="200" />
+  <p><em>Interactive data center design and optimization tool</em></p>
+</div>
 
-* Modules.csv:
+## 🌟 Project Overview
 
+DataCenter-DeCoder is an interactive tool for designing and optimizing data center configurations. Developed in collaboration with Siemens Energy, this project helps create valid datacenter layouts that satisfy complex constraints and optimize objectives based on available modules like transformers, water supply units, and processors.
+
+## ✨ Features
+
+- **Constraint-based optimization** for data center layout generation
+- **Interactive module placement** with drag-and-drop interface
+- **Dynamic resource management** for modules and constraints
+- **Visualization tools** for data center layouts
+- **Support for multiple datacenter types** (Server Square, Dense Storage, Supercomputer)
+
+## 🏛️ Architecture
+
+- **Frontend**: React + TypeScript + Vite
+- **Backend**: Python with FastAPI
+- **Data Storage**: MongoDB for module and constraint data
+
+## 💾 Data Structure
+
+The project works with two primary data files:
+
+### Modules.csv
+Contains specifications for available modules (transformers, water supplies, etc.) with their:
+- Resource requirements (inputs)
+- Resource production (outputs)
+- Space requirements
+- Costs
+
+Example:
+```
 ID;Name;Is_Input;Is_Output;Unit;Amount
 1;Transformer_100;1;0;Grid_Connection;1
 1;Transformer_100;1;0;Space_X;40
 1;Transformer_100;1;0;Space_Y;45
 1;Transformer_100;1;0;Price;1000
 1;Transformer_100;0;1;Usable_Power;100
-2;Transformer_1000;1;0;Grid_Connection;1
-2;Transformer_1000;1;0;Space_X;100
-2;Transformer_1000;1;0;Space_Y;100
-2;Transformer_1000;1;0;Price;50000
-2;Transformer_1000;0;1;Usable_Power;1000
-3;Transformer_5000;1;0;Grid_Connection;1
-3;Transformer_5000;1;0;Space_X;200
-3;Transformer_5000;1;0;Space_Y;200
-3;Transformer_5000;1;0;Price;250000
-3;Transformer_5000;0;1;Usable_Power;5000
-4;Water_Supply_100;1;0;Water_Connection;1
-4;Water_Supply_100;1;0;Space_X;50
-4;Water_Supply_100;1;0;Space_Y;50
-4;Water_Supply_100;1;0;Price;200
-4;Water_Supply_100;0;1;Fresh_Water;100
-5;Water_Supply_500;1;0;Water_Connection;1
-5;Water_Supply_500;1;0;Space_X;150
-5;Water_Supply_500;1;0;Space_Y;100
-5;Water_Supply_500;1;0;Price;400
-5;Water_Supply_500;0;1;Fresh_Water;500
+```
 
-* Data_Center_Spec.csv
+### Data_Center_Spec.csv
+Defines datacenter types with constraints and objectives:
+- Resource requirements and limits
+- Space constraints
+- Optimization goals (minimize/maximize)
 
+Example:
+```
 ID;Name;Below_Amount;Above_Amount;Minimize;Maximize;Unconstrained;Unit;Amount
-
 1;Server_Square;0;0;0;1;0;External_Network;
 1;Server_Square;1;0;0;0;0;Grid_Connection;3
-1;Server_Square;1;0;0;0;0;Water_Connection;1
 1;Server_Square;1;0;0;0;0;Space_X;1000
-1;Server_Square;1;0;0;0;0;Space_Y;500
-1;Server_Square;0;1;0;0;0;Data_Storage;1000
-1;Server_Square;0;1;0;0;0;Processing;1000
-1;Server_Square;1;0;0;0;0;Price;1000000
+```
 
-2;Dense_Storage;0;0;0;0;1;Grid_Connection;
-2;Dense_Storage;0;0;0;0;1;Water_Connection;
-2;Dense_Storage;0;0;1;0;0;Space_X;
-2;Dense_Storage;0;0;1;0;0;Space_Y;
-2;Dense_Storage;0;0;0;1;0;Data_Storage;
-2;Dense_Storage;1;0;0;0;0;Price;5000000
+## 🚀 Installation
 
-3;Supercomputer;0;0;0;0;1;Grid_Connection;
-3;Supercomputer;0;0;0;0;1;Water_Connection;
-3;Supercomputer;0;0;1;0;0;Usable_Power;
-3;Supercomputer;0;0;0;1;0;Processing;
-3;Supercomputer;1;0;0;0;0;Space_X;2000
-3;Supercomputer;1;0;0;0;0;Space_Y;1000
+### Backend Setup
+```bash
+pip install fastapi uvicorn pymongo pydantic
+pip install motor
+pip install pymongo pymongo[srv] python-dotenv
+```
 
+Run the backend server:
+```bash
+uvicorn main:app --reload --port 8000
+```
 
+### Frontend Setup
+```bash
+cd app/frontend
+npm install
+```
 
-## DataCenter Specifications
-We are also provided with a set of objectives and constraints for designing a data center. These cover units such as:
+Run the frontend development server:
+```bash
+npm run dev
+```
 
-external_network
+## 🎯 Project Goals
 
-grid_connections
+Our project aims to:
 
-water_connection
+- Generate valid datacenter configurations that satisfy constraints and optimize objectives
+- Support dynamic addition of new modules and resources
+- Handle complex, custom constraints and objectives
+- Provide an intuitive user interface with:
+  - Drag-and-drop module placement
+  - Search and recommendation features
+  - Visual aesthetics like wires/pipes and hallways
+  - Detailed elements such as circuit breakers and control rooms
 
-space_x / space_y
+## 🔮 Future Development
 
-data_storage
+We'll store our module and tabular data in MongoDB.
 
-processing
+This is an incremental project with a long-term vision. Beyond the initial valid solution generation, we plan to:
 
-price
+- Place datacenters on geographical maps
+- Modify existing setups with new constraints
+- Add detailed aesthetics (wires/pipes, hallways, etc.)
+- Implement advanced features like circuit breakers, control rooms, and ventilation
+- Scale up to more complex environments and goals
 
-Each unit can be associated with constraints or goals like:
+## 👥 Team
 
-below_amount
+A team of 4 students with backgrounds in Data Science, AI, and Mathematics, experienced in optimization and machine learning.
 
-above_amount
+## 📸 Screenshots
 
-minimize
+![Server Square Datacenter](https://raw.githubusercontent.com/username/DataCenter-DeCoder/main/docs/server_square.png)
+![Interactive Design Interface](https://raw.githubusercontent.com/username/DataCenter-DeCoder/main/docs/interface.png)
 
-maximize
+## 📄 License
 
-Goals
-Our initial goal is to build a system that generates valid datacenter configurations that satisfy the constraints and optimize the given objectives based on the available modules.
-
-But it’s not just about solving a static optimization problem. We also want:
-
-The ability to add new modules and resources dynamically
-
-Support for complex, custom constraints/objectives
-
-A rich and intuitive user interface, with:
-
-Drag-and-drop module placement
-
-Search and recommendation features
-
-Visual aesthetics like wires/pipes, hallways, power/cooling separation
-
-Details such as circuit breakers, control rooms, maintenance access, ventilation
-
-Tech & Team
-We are a team of 4 students with backgrounds in Data Science, AI, and Mathematics. We have experience in optimization and machine learning. Our main language is Python, and we want to use tools as close to Python as possible.
-
-We’ll store our module and tabular data in MongoDB.
-
-Long-term Vision
-This is an incremental project. The first step is to generate a valid solution, which is relatively easy. But we want to build it in a scalable way, so that we can later:
-
-Place datacenters on a map
-
-Modify an existing setup with new constraints
-
-Scale up to more complex environments and goals
-
-# Requirements
-**Backend:**
-- `pip install fastapi uvicorn pymongo pydantic`
-- `pip install motor`
-- `pip install pymongo pymongo[srv] python-dotenv`
-
-Run with: `uvicorn main:app --reload --port 8000`
-
-**Frontend**:
-- **DO NOT RUN THIS**`npm create vite@latest . --template react`
-- `npm install`
-- **Not necessary**:`npm install @mui/material @emotion/react @emotion/styled`
-- **Not necessary**:`npm install react-router-dom`
-- **Not necessary**:`npm install @dnd-kit/core`
-
-Run with: `npm run dev`
+[MIT](LICENSE)
