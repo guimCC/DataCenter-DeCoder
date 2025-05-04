@@ -100,7 +100,7 @@ async def solve_components_with_fixed_modules(specs, weights, fixed_modules: lis
     return solve_module_list_with_fixed_modules(modules, specs, weights, fixed_modules)
 
 
-# POST: solve problem and get list, with given fixed modules
+# POST: solve problem for the placements of the modules of module_list, possibly with fixed_modules
 @app.post('/solve-placements')
 def solve_placements(specs, module_list, fixed_modules: list[Module]):
     modules = get_modules()
