@@ -557,7 +557,7 @@ def validate_placement_output(result):
     return True, "Output format is valid"
 
 
-def solve_modules_placement_with_fixed(modules: list[Module], specs: list[dict], selected_modules_counts: dict, modules_with_position: list[dict]):
+def solve_modules_placement_with_fixed(modules: list[Module], specs: list[dict], selected_modules_counts: dict, modules_with_position: list[dict] = []):
     """
     Places modules, respecting pre-defined positions for some modules.
 
@@ -573,6 +573,10 @@ def solve_modules_placement_with_fixed(modules: list[Module], specs: list[dict],
         dict: A dictionary containing the final datacenter configuration,
               including both fixed and newly placed modules, in the standard format.
     """
+    if not modules_with_position:
+        print("--- No fixed modules provided, running standard placement ---")
+        return _solve_module_placement(modules, specs, selected_modules_counts, unavailable_area=None)
+
     print("--- Starting Placement with Fixed Modules ---")
     start_time_fixed = time.time()
 
