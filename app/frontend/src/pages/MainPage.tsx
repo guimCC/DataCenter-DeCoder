@@ -14,6 +14,7 @@ import ReactFlow, {
   Position,          // Enum for Handle positions (if used)
   Handle,            // Component for connection points (if used)
   Viewport,          // Type for viewport object
+  ReactFlowInstance, // Import for type safety
 } from 'reactflow';
 import 'reactflow/dist/style.css'; // Essential React Flow styles
 
@@ -27,19 +28,17 @@ import { PositionedModule, DataCenter, Module, IOField, SpecRule } from '../type
 
 // --- Configuration Constants ---
 const CELL_SIZE = 10; // Pixel size of one grid cell for layout calculations
-const DEFAULT_GRID_DIMENSIONS = { rows: 100, cols: 100 }; // Fallback grid size
+const DEFAULT_GRID_DIMENSIONS = { rows: 100, cols: 200 }; // Fallback grid size if constraints missing
 const BOUNDARY_NODE_ID = 'grid-boundary-node'; // Unique ID for the boundary node
 
 // --- Module Styling Helpers (Defined Outside Component) ---
-// Color mapping for different module types
 const MODULE_COLORS = {
     transformer: '#E9DA54', water_supply: '#2196f3', water_treatment: '#03a9f4',
     water_chiller: '#00bcd4', network_rack: '#ff9800', server_rack: '#4caf50',
     data_rack: '#9c27b0', default: '#757575'
 };
-// Determines the type category based on the module name
 const getModuleType = (name: string): keyof typeof MODULE_COLORS => {
-  const lowerName = name?.toLowerCase() || ''; // Use nullish coalescing for safety
+  const lowerName = name?.toLowerCase() || '';
   if (lowerName.startsWith('transformer')) return 'transformer';
   if (lowerName.includes('network_rack')) return 'network_rack';
   if (lowerName.includes('server_rack')) return 'server_rack';
@@ -47,56 +46,46 @@ const getModuleType = (name: string): keyof typeof MODULE_COLORS => {
   if (lowerName.includes('water_supply')) return 'water_supply';
   if (lowerName.includes('water_treatment')) return 'water_treatment';
   if (lowerName.includes('water_chiller')) return 'water_chiller';
-  return 'default'; // Fallback type
+  return 'default';
 };
-// Gets the background color for a module
 const getModuleColor = (moduleName: string) => MODULE_COLORS[getModuleType(moduleName)] || MODULE_COLORS.default;
-// Gets the path to the sprite image (ensure '/sprites/' is correct relative to your public folder)
 const getSpritePath = (moduleName: string) => `/sprites/${getModuleType(moduleName)}.png`;
 
 
 // --- Custom Node Components ---
 
-// Component for Module Nodes
+// Component for Module Nodes (No Name Displayed)
 interface ModuleNodeData {
-  module: PositionedModule; // The data associated with the node
-  widthPx: number;         // Calculated width in pixels
-  heightPx: number;        // Calculated height in pixels
+  module: PositionedModule;
+  widthPx: number;
+  heightPx: number;
 }
 const ModuleNode: React.FC<{ data: ModuleNodeData; id: string; selected: boolean }> = React.memo(({ data, selected }) => {
   const { module, widthPx, heightPx } = data;
-  // Defensive check in case module data is somehow invalid
   if (!module) {
-      console.error("ModuleNode received invalid data:", data);
-      return <Box sx={{width: widthPx, height: heightPx, backgroundColor: 'red', border: '1px solid white', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9}}>Data Error</Box>;
+      return ( <Box sx={{width: widthPx||40, height: heightPx||40, backgroundColor:'red', border:'1px solid white', color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, borderRadius:1}}>Data Err</Box> );
   }
   const color = getModuleColor(module.name);
   const spritePath = getSpritePath(module.name);
-
-  // Main container for the node visual
   return (
     <Box sx={{
         width: `${widthPx}px`, height: `${heightPx}px`, backgroundColor: color, borderRadius: 1,
-        border: selected ? '3px solid white' : `1px solid rgba(255, 255, 255, 0.4)`, // Highlight when selected
+        border: selected ? '3px solid white' : `1px solid rgba(255, 255, 255, 0.4)`,
         display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
         padding: '4px', position: 'relative', boxShadow: selected ? '0 0 10px rgba(255, 255, 255, 0.6)' : '0 2px 5px rgba(0,0,0,0.3)',
-        transition: 'border 0.15s ease-out, box-shadow 0.15s ease-out', fontSize: '10px', color: 'white',
-        overflow: 'hidden', cursor: 'grab', '&:active': { cursor: 'grabbing' }, // Cursors for dragging
+        transition: 'border 0.15s ease-out, box-shadow 0.15s ease-out',
+        overflow: 'hidden', cursor: 'grab', '&:active': { cursor: 'grabbing' },
+        boxSizing: 'border-box',
     }}>
-      {/* Module Image */}
-      <Box component="img" src={spritePath} alt={module.name} sx={{
-          maxWidth: '70%', maxHeight: '65%', objectFit: 'contain', filter: 'brightness(1.1)',
-          pointerEvents: 'none', mb: '2px', // Prevent image interfering with drag
+      <Box component="img" src={spritePath} alt={module.name || 'Module Image'} sx={{
+          maxWidth: '85%', maxHeight: '85%', objectFit: 'contain',
+          filter: 'brightness(1.1)', pointerEvents: 'none',
       }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}/>
-       {/* Module Name Label */}
-       <Typography variant="caption" sx={{
-           textAlign: 'center', pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis',
-           whiteSpace: 'nowrap', width: '95%', lineHeight: 1.2, fontWeight: 'medium',
-       }}>{module.name || 'Unnamed'}</Typography>
+      {/* No Typography component here to display the name */}
     </Box>
   );
 });
-ModuleNode.displayName = 'ModuleNode'; // Helps in React DevTools debugging
+ModuleNode.displayName = 'ModuleNode';
 
 // Component for the Grid Boundary Node
 interface BoundaryNodeData {
@@ -105,27 +94,18 @@ interface BoundaryNodeData {
 }
 const BoundaryNode: React.FC<{ data: BoundaryNodeData }> = React.memo(({ data }) => {
     const { widthPx, heightPx } = data;
-    // Renders a non-interactive dashed box representing the grid limits
     return (
-        <Box
-            sx={{
-                width: `${widthPx}px`,
-                height: `${heightPx}px`,
-                border: '8px dashed rgba(255, 255, 255, 0.4)', // Visual style of the boundary
-                backgroundColor: 'transparent', // No fill
-                borderRadius: '4px',
-                // Critical: Prevent this node from interfering with mouse events
-                pointerEvents: 'none',
-                boxSizing: 'border-box', // Ensure border is included in width/height
-            }}
-        />
+        <Box sx={{
+                width: `${widthPx}px`, height: `${heightPx}px`,
+                border: '8px dashed rgba(255, 255, 255, 0.4)', // Thicker boundary
+                backgroundColor: 'transparent', borderRadius: '4px',
+                pointerEvents: 'none', boxSizing: 'border-box',
+            }} />
     );
 });
 BoundaryNode.displayName = 'BoundaryNode';
 
-// ***** Define nodeTypes CONSTANT AT THE TOP LEVEL *****
-// Maps string identifiers used in node objects to the actual React components.
-// Includes the new boundary node type.
+// Define nodeTypes CONSTANT AT THE TOP LEVEL
 const nodeTypes = {
   moduleNode: ModuleNode,
   boundaryNode: BoundaryNode,
@@ -134,178 +114,153 @@ const nodeTypes = {
 
 // --- Main Page Component Definition ---
 const MainPage = () => {
-  // --- State Management ---
+  // --- State ---
   const [constraints, setConstraints] = useState({ maxPrice: '', maxSpaceX: '', maxSpaceY: '' });
   const [datacenters, setDatacenters] = useState<DataCenter[]>([]);
   const [selectedDC, setSelectedDC] = useState<number | "">("");
   const [currentZoom, setCurrentZoom] = useState<number>(1);
-  const [resultModules, setResultModules] = useState<PositionedModule[]>([]); // Canonical data source
+  const [resultModules, setResultModules] = useState<PositionedModule[]>([]); // Canonical data
 
-  // React Flow State Hooks
+  // RF State
   const [nodes, setNodes, onNodesChange] = useNodesState<ModuleNodeData | BoundaryNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const reactFlowInstance = useReactFlow<ModuleNodeData | BoundaryNodeData, Edge>();
 
-  // Memoized calculation of grid dimensions in pixels based on constraints
+  // Calculate grid dimensions
   const gridPixelDimensions = useMemo(() => ({
     width: (parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols) * CELL_SIZE,
     height: (parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows) * CELL_SIZE,
-  }), [constraints.maxSpaceX, constraints.maxSpaceY]);
+  }), [constraints.maxSpaceX, constraints.maxSpaceY, CELL_SIZE]); // Include CELL_SIZE
 
-  // --- Data Fetching Effect ---
-  // Fetches the list of datacenters when the component first mounts
+  // --- Effects ---
+
+  // Fetch Datacenters on Mount
   useEffect(() => {
     console.log("Effect: Fetching datacenters...");
     let isMounted = true;
     fetch("http://localhost:8000/datacenters") // Replace with your API endpoint
-      .then(res => {
-          if (!res.ok) { throw new Error(`Fetch error! status: ${res.status}`); }
-          return res.json();
-      })
-      .then((data: DataCenter[]) => {
-          if (isMounted) {
-              console.log(`Effect: Datacenters received: ${data?.length ?? 0}`);
-              setDatacenters(data || []);
-          }
-      })
+      .then(res => { if (!res.ok) throw new Error(`Fetch error! status: ${res.status}`); return res.json(); })
+      .then((data: DataCenter[]) => { if (isMounted) { setDatacenters(data || []); } })
       .catch(err => console.error("Effect: Failed to fetch datacenters:", err));
-    return () => { isMounted = false; console.log("Effect: Cleanup fetch datacenters."); };
-  }, []); // Empty dependency array ensures it runs only once
+    return () => { isMounted = false; };
+  }, []);
 
-  // --- Data Transformation Function ---
-  // Converts the `resultModules` array into React Flow `Node` objects for modules
+  // --- Data Transformation (Initial Node Structure) ---
+  // Calculates initial node properties but DOES NOT set final position here.
   const transformModulesToNodes = useCallback((modules: PositionedModule[]): Node<ModuleNodeData>[] => {
-    console.log(`Transforming ${modules?.length ?? 0} modules to nodes...`);
     const moduleNodes: Node<ModuleNodeData>[] = [];
     if (!Array.isArray(modules)) return moduleNodes;
-
     const usedIds = new Set<string>();
     modules.forEach((mod, index) => {
-      if (!mod || typeof mod.id === 'undefined' || mod.id === null) {
-          console.warn(`Skipping module at index ${index} due to missing data or ID.`);
-          return;
-      }
-      const uniqueNodeId = `mod_${mod.id}_${index}`; // Create unique ID for RF
-      if (usedIds.has(uniqueNodeId)) {
-           console.warn(`Duplicate Node ID generated: ${uniqueNodeId}. Skipping.`); return;
-      }
+      if (!mod || typeof mod.id === 'undefined' || mod.id === null) return;
+      const uniqueNodeId = `mod_${mod.id}_${index}`;
+      if (usedIds.has(uniqueNodeId)) return;
       usedIds.add(uniqueNodeId);
       const widthCells = mod.width ?? 1; const heightCells = mod.height ?? 1;
       const widthPx = widthCells * CELL_SIZE; const heightPx = heightCells * CELL_SIZE;
       const gridCol = mod.gridColumn ?? 1; const gridRow = mod.gridRow ?? 1;
-      const posX = (gridCol - 1) * CELL_SIZE; const posY = (gridRow - 1) * CELL_SIZE;
+      const initialPosX = (gridCol - 1) * CELL_SIZE; const initialPosY = (gridRow - 1) * CELL_SIZE;
       moduleNodes.push({
-        id: uniqueNodeId, type: 'moduleNode', position: { x: posX, y: posY },
-        data: { module: mod, widthPx, heightPx }, draggable: true, zIndex: 1, // Ensure modules are above boundary
+        id: uniqueNodeId, type: 'moduleNode', position: { x: initialPosX, y: initialPosY },
+        data: { module: mod, widthPx, heightPx }, draggable: true, zIndex: 1,
       });
     });
-    console.log(`Transformation resulted in ${moduleNodes.length} module nodes.`);
     return moduleNodes;
-  }, []); // Callback depends only on constant CELL_SIZE
+  }, [CELL_SIZE]); // Dependency on CELL_SIZE
 
-  // --- State Synchronization Effect ---
-  // Updates the React Flow `nodes` state whenever `resultModules` or `gridPixelDimensions` change
+  // --- State Synchronization Effect (Reconciles Nodes) ---
+  // Ensures RF nodes match `resultModules` for existence and data, but preserves positions set by drag.
   useEffect(() => {
-    console.log("Effect: resultModules or grid dimensions changed, updating nodes...");
+    console.log("Effect: Reconciling nodes based on resultModules or grid dimensions...");
 
-    // 1. Generate nodes for the modules
-    const moduleNodes = transformModulesToNodes(resultModules);
+    setNodes(currentNodes => {
+        const existingNodesMap = new Map<string, Node<ModuleNodeData | BoundaryNodeData>>();
+        currentNodes.forEach(node => { if (node.id !== BOUNDARY_NODE_ID) existingNodesMap.set(node.id, node); });
 
-    // 2. Create the grid boundary node if dimensions are valid
-    let boundaryNode: Node<BoundaryNodeData> | null = null;
-    if (gridPixelDimensions.width > 0 && gridPixelDimensions.height > 0) {
-        boundaryNode = {
-            id: BOUNDARY_NODE_ID,
-            type: 'boundaryNode',
-            // Position slightly offset so border appears correctly at 0,0
-            position: { x: -1, y: -1 },
-            data: {
-                // Add border width compensation to pixel dimensions
-                widthPx: gridPixelDimensions.width + 2,
-                heightPx: gridPixelDimensions.height + 2,
-            },
-            draggable: false,     // Not draggable
-            selectable: false,    // Not selectable
-            zIndex: -1,           // Render behind everything else
-        };
-    }
+        const desiredModuleStructures = transformModulesToNodes(resultModules);
+        const desiredNodeIds = new Set(desiredModuleStructures.map(n => n.id));
 
-    // 3. Combine module nodes and the boundary node (if created)
-    const allNodes = boundaryNode ? [...moduleNodes, boundaryNode] : moduleNodes;
+        const reconciledModuleNodes: Node<ModuleNodeData>[] = desiredModuleStructures.map(desiredNode => {
+            const existingNode = existingNodesMap.get(desiredNode.id) as Node<ModuleNodeData> | undefined;
+            if (existingNode) {
+                // Node exists: Keep existing position, update data if underlying module changed
+                if (existingNode.data.module !== desiredNode.data.module || existingNode.data.widthPx !== desiredNode.data.widthPx || existingNode.data.heightPx !== desiredNode.data.heightPx) {
+                     return { ...existingNode, data: desiredNode.data };
+                } else { return existingNode; } // Data same, return original ref
+            } else { return desiredNode; } // New node
+        });
 
-    console.log(`Setting ${allNodes.length} total nodes (Modules: ${moduleNodes.length}). Boundary ${boundaryNode ? 'included' : 'excluded'}.`);
-    setNodes(allNodes); // Update the combined node list for React Flow
+        // Filter out nodes no longer in resultModules (reconciliation)
+        const finalModuleNodes = reconciledModuleNodes.filter(node => desiredNodeIds.has(node.id));
 
-    // 4. Adjust Viewport (Fit or Reset) - Logic remains the same
-     if (moduleNodes.length > 0) {
+        // Create/Update Boundary Node
+        let boundaryNode: Node<BoundaryNodeData> | null = null;
+        if (gridPixelDimensions.width > 0 && gridPixelDimensions.height > 0) {
+            boundaryNode = {
+                id: BOUNDARY_NODE_ID, type: 'boundaryNode', position: { x: -4, y: -4 }, // Offset for border
+                data: { widthPx: gridPixelDimensions.width + 8, heightPx: gridPixelDimensions.height + 8, }, // Size includes border
+                draggable: false, selectable: false, zIndex: -1,
+            };
+        }
+        const finalNodes = boundaryNode ? [...finalModuleNodes, boundaryNode] : finalModuleNodes;
+
+        // Prevent unnecessary state update if nodes haven't changed significantly
+        if (currentNodes.length !== finalNodes.length || !currentNodes.every((node, i) => node.id === finalNodes[i]?.id && node.position === finalNodes[i]?.position && node.data === finalNodes[i]?.data)) {
+             console.log(`Reconciliation Result: ${finalNodes.length} nodes. Updating state.`);
+             return finalNodes;
+        } else {
+             console.log(`Reconciliation Result: ${finalNodes.length} nodes. No significant state change needed.`);
+             return currentNodes;
+        }
+    }); // End setNodes
+
+    // Adjust Viewport
+     if (resultModules.length > 0) {
         const fitViewTimeout = setTimeout(() => {
-            if (reactFlowInstance) {
-                console.log("Effect: Fitting view...");
-                try {
-                    reactFlowInstance.fitView({ padding: 0.25, duration: 300, includeHiddenNodes: true });
-                    setCurrentZoom(reactFlowInstance.getViewport().zoom);
-                } catch (error) { console.error("Error during fitView:", error); }
-            }
+            if (reactFlowInstance?.fitView) {
+                 console.log("Effect: Fitting view...");
+                 try { reactFlowInstance.fitView({ padding: 0.25, duration: 300 }); }
+                 catch (error) { console.error("Error during fitView:", error); }
+             }
         }, 150);
         return () => clearTimeout(fitViewTimeout);
-    } else {
-        const resetTimeout = setTimeout(() => {
-            if (reactFlowInstance) {
-                console.log("Effect: No nodes, resetting viewport.");
-                try {
-                    reactFlowInstance.setViewport({ x: 0, y: 0, zoom: 1 });
-                    setCurrentZoom(1);
-                } catch (error) { console.error("Error during setViewport:", error); }
-            }
-        }, 150);
-        return () => clearTimeout(resetTimeout);
     }
-  // This effect depends on the module data and the calculated grid dimensions
-  }, [resultModules, gridPixelDimensions, transformModulesToNodes, setNodes, reactFlowInstance]);
+    // No need for explicit viewport reset if defaultViewport is set
+
+  }, [resultModules, gridPixelDimensions, setNodes, reactFlowInstance, transformModulesToNodes]);
 
   // --- Event Handlers ---
-
-  // Handles constraint input changes
   const handleChange = (field: string, value: string) => {
     setConstraints(prev => ({ ...prev, [field]: value.replace(/[^0-9.]/g, '') }));
   };
 
-  // Handles "Design" button click (fetch solved layout)
   const handleDesign = () => {
     console.log("Handling Design button click...");
     fetch("http://localhost:8000/solve-dummy", { // Replace with your solve endpoint
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ /* ... constraints ... */ })
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ constraints: { price: parseFloat(constraints.maxPrice) || 0, space_x: parseFloat(constraints.maxSpaceX) || 0, space_y: parseFloat(constraints.maxSpaceY) || 0, } })
     })
     .then(res => { if (!res.ok) throw new Error(`Solve error: ${res.status}`); return res.json(); })
     .then((data: { modules?: PositionedModule[] }) => {
         const modules = data?.modules || [];
-        console.log(`Received ${modules.length} modules from design solve.`);
         const processedModules: PositionedModule[] = modules
             .filter(m => m != null && m.id != null)
             .map((m, index) => ({
-                ...m, id: `design_${m.id}_${index}`, // Unique ID
-                // Provide defaults if solve endpoint doesn't guarantee position/size
-                gridColumn: m.gridColumn ?? 1, gridRow: m.gridRow ?? 1,
-                width: m.width ?? 1, height: m.height ?? 1,
-                io_fields: m.io_fields ?? [],
+                ...m, id: `design_${m.id}_${index}`,
+                gridColumn:  Math.floor(m.gridColumn / CELL_SIZE) + 1, gridRow:  Math.floor(m.gridRow / CELL_SIZE) + 1,
+                width:  Math.floor(m.width / CELL_SIZE), height:  Math.floor(m.height / CELL_SIZE), io_fields: m.io_fields ?? [],
             }));
         setResultModules(processedModules);
     })
     .catch(err => console.error("Design fetch/process failed:", err));
   };
 
-  // Handles selection from the "Load Datacenter" dropdown
   const handleDCSelect = (dcId: number | "") => {
     console.log(`Handling DC Select change: ${dcId}`);
     setSelectedDC(dcId);
-    if (dcId === "") {
-        setResultModules([]); setConstraints({ maxPrice: '', maxSpaceX: '', maxSpaceY: ''}); return;
-    }
+    if (dcId === "") { setResultModules([]); setConstraints({ maxPrice: '', maxSpaceX: '', maxSpaceY: ''}); return; }
     const selected: DataCenter | undefined = datacenters.find(dc => dc.id === dcId);
     if (selected) {
-      console.log(`Selected datacenter (ID: ${dcId}): ${selected.name}`);
       const spaceXRule = selected.specs?.find(spec => spec.Unit?.toLowerCase() === "space_x");
       const spaceYRule = selected.specs?.find(spec => spec.Unit?.toLowerCase() === "space_y");
       const priceRule = selected.specs?.find(spec => spec.Unit?.toLowerCase() === "price");
@@ -313,59 +268,55 @@ const MainPage = () => {
       const spaceYCells = spaceYRule?.Amount ? Math.ceil(spaceYRule.Amount) : DEFAULT_GRID_DIMENSIONS.rows;
       const maxPrice = priceRule?.Amount?.toString() || "";
       setConstraints({ maxPrice: maxPrice, maxSpaceX: spaceXCells.toString(), maxSpaceY: spaceYCells.toString() });
-
       if (Array.isArray(selected.modules)) {
           const processedModules: PositionedModule[] = selected.modules
               .filter(m => m != null && m.id != null)
-              .map((m, index) => ({ ...m, id: `dc_${selected.id}_${m.id}_${index}` })); // Unique ID
-           const validMods = processedModules.filter(mod => { // Filter based on DC bounds
-                const gCol=mod.gridColumn +1; const gRow=mod.gridRow + 1; const w=mod.width??1; const h=mod.height??1;
+              .map((m, index) => ({ ...m, id: `dc_${selected.id}_${m.id}_${index}` }));
+           const validMods = processedModules.filter(mod => {
+                const gCol=(mod.gridColumn + 1); const gRow=(mod.gridRow+ 1); const w=(mod.width??1); const h=(mod.height??1);
                 return gCol > 0 && gRow > 0 && (gCol + w - 1) <= spaceXCells && (gRow + h - 1) <= spaceYCells;
            });
-           console.log(`Setting ${validMods.length} valid modules from DC ${selected.id}.`);
            setResultModules(validMods);
-      } else { console.warn(`No valid modules array for DC ${selected.id}`); setResultModules([]); }
-    } else { console.warn(`DC with ID ${dcId} not found.`); setResultModules([]); setConstraints({ maxPrice: '', maxSpaceX: '', maxSpaceY: ''}); }
-  }
+      } else { setResultModules([]); }
+    } else { setResultModules([]); setConstraints({ maxPrice: '', maxSpaceX: '', maxSpaceY: ''}); }
+  };
 
-  // Handles node drag stop: Snaps node to grid, checks bounds and collisions
+  // Drag Stop Handler (Updates position in BOTH states if valid)
   const onNodeDragStop: NodeDragHandler = useCallback((event, draggedNode) => {
-    // Ignore event if it's for the boundary node
-    if (draggedNode.id === BOUNDARY_NODE_ID || !draggedNode.data) return;
+    if (draggedNode.id === BOUNDARY_NODE_ID || !draggedNode.data || !draggedNode.position) return;
 
     const uniqueDraggedNodeId = draggedNode.id;
-    console.log(`Node Drag Stop: ${uniqueDraggedNodeId}`);
-    const nodesCopy = reactFlowInstance.getNodes();
+    const nodeData = draggedNode.data as ModuleNodeData;
+    console.log(`--- Node Drag Stop: ${uniqueDraggedNodeId} ---`);
 
-    // --- 1. Calculate Snapped Position ---
     const snappedX = Math.round(draggedNode.position.x / CELL_SIZE) * CELL_SIZE;
     const snappedY = Math.round(draggedNode.position.y / CELL_SIZE) * CELL_SIZE;
-    console.log(`  Original Pos: (${draggedNode.position.x.toFixed(1)}, ${draggedNode.position.y.toFixed(1)}), Snapped: (${snappedX}, ${snappedY})`);
+    console.log(`  Snapped Pos: (${snappedX}, ${snappedY})`);
 
-    // --- 2. Boundary Checks (using SNAPPED position) ---
-    const nodeWidth = (draggedNode.data as ModuleNodeData).widthPx; // Type assertion needed here
-    const nodeHeight = (draggedNode.data as ModuleNodeData).heightPx;
+    const nodeWidth = nodeData.widthPx; const nodeHeight = nodeData.heightPx;
     const maxX = gridPixelDimensions.width; const maxY = gridPixelDimensions.height;
     const withinBounds = snappedX >= 0 && snappedY >= 0 && (snappedX + nodeWidth) <= maxX && (snappedY + nodeHeight) <= maxY;
+    console.log(`  Within Bounds Check: ${withinBounds}`);
 
-    // --- 3. Collision Detection (using SNAPPED position) ---
     let collision = false;
     if (withinBounds) {
+        const nodesCopy = reactFlowInstance.getNodes();
         for (const otherNode of nodesCopy) {
             if (otherNode.id === uniqueDraggedNodeId || otherNode.id === BOUNDARY_NODE_ID) continue;
-            if (!otherNode.position || !(otherNode.data as ModuleNodeData)?.widthPx || !(otherNode.data as ModuleNodeData)?.heightPx) continue;
+            if (!otherNode.position || !(otherNode.data as ModuleNodeData)?.widthPx) continue;
+            const otherData = otherNode.data as ModuleNodeData;
             const otherX=otherNode.position.x; const otherY=otherNode.position.y;
-            const otherW=(otherNode.data as ModuleNodeData).widthPx; const otherH=(otherNode.data as ModuleNodeData).heightPx;
+            const otherW=otherData.widthPx; const otherH=otherData.heightPx;
             const xOverlap = snappedX < otherX + otherW && (snappedX + nodeWidth) > otherX;
             const yOverlap = snappedY < otherY + otherH && (snappedY + nodeHeight) > otherY;
             if (xOverlap && yOverlap) { collision = true; break; }
         }
     }
+    console.log(`  Collision Check Result: ${collision}`);
 
-    // --- 4. Update State or Revert ---
     if (withinBounds && !collision) {
-      console.log(`  Drop Valid. Updating state with SNAPPED position.`);
-      setNodes((nds) => nds.map((n) => n.id === uniqueDraggedNodeId ? { ...n, position: { x: snappedX, y: snappedY } } : n));
+      console.log(`  Drop Valid. Updating states with SNAPPED position.`);
+      setNodes((nds) => nds.map((n) => n.id === uniqueDraggedNodeId ? { ...n, position: { x: snappedX, y: snappedY } } : n ));
       setResultModules((prevModules) => prevModules.map(mod =>
             mod.id === uniqueDraggedNodeId
             ? { ...mod, gridColumn: (snappedX / CELL_SIZE) + 1, gridRow: (snappedY / CELL_SIZE) + 1 }
@@ -373,111 +324,82 @@ const MainPage = () => {
           )
       );
     } else {
-      console.warn(`  Drop Invalid. Bounds: ${withinBounds}, Collision: ${collision}. Reverting visual.`);
-      setNodes((nds) => [...nds]); // Trigger re-render to snap back visually
+      console.warn(`  Drop Invalid/Rejected. Reverting visual.`);
+      // No explicit state update needed here for revert with onNodesChange in use
     }
-  }, [reactFlowInstance, setNodes, gridPixelDimensions, setResultModules]); // Dependencies
+    console.log(`--- Node Drag Stop End: ${uniqueDraggedNodeId} ---`);
+  }, [reactFlowInstance, setNodes, gridPixelDimensions, setResultModules, CELL_SIZE]); // Include CELL_SIZE
 
-  // Handles viewport change event (e.g., after zoom/pan stops)
+  // Viewport Change Handler
   const handleViewportChange = useCallback((viewport: Viewport | undefined) => {
-      if (viewport && typeof viewport.zoom === 'number') {
-          setCurrentZoom(viewport.zoom); // Update displayed zoom level
-      }
-  }, []); // No dependencies needed
+    if (viewport && typeof viewport.zoom === 'number') { setCurrentZoom(viewport.zoom); }
+  }, []);
 
-  // --- Memoized UI Elements (Legend and Constraints Panels) ---
-
-  // Memoized Legend Panel
+  // --- Memoized UI Elements ---
   const ModuleLegendElement = useMemo(() => {
-    // *** FULL moduleTypes Array Definition ***
-    const moduleTypes = [
-     { name: 'transformer', displayName: 'Transformer' },
-     { name: 'water_supply', displayName: 'Water Supply' },
-     { name: 'water_treatment', displayName: 'Water Treatment' },
-     { name: 'water_chiller', displayName: 'Water Chiller' },
-     { name: 'network_rack', displayName: 'Network Rack' },
-     { name: 'server_rack', displayName: 'Server Rack' },
-     { name: 'data_rack', displayName: 'Data Rack' },
-     { name: 'default', displayName: 'Other' }, // Fallback for uncategorized modules
-   ];
-   // ****************************************
+     const moduleTypes = [
+        { name: 'transformer', displayName: 'Transformer' }, { name: 'water_supply', displayName: 'Water Supply' },
+        { name: 'water_treatment', displayName: 'Water Treatment' }, { name: 'water_chiller', displayName: 'Water Chiller' },
+        { name: 'network_rack', displayName: 'Network Rack' }, { name: 'server_rack', displayName: 'Server Rack' },
+        { name: 'data_rack', displayName: 'Data Rack' }, { name: 'default', displayName: 'Other' }
+      ];
+     return (
+       <Paper elevation={3} sx={{
+         p: 1.5, width: 180, backgroundColor: 'rgba(32, 20, 52, 0.9)',
+         position: 'absolute', right: 16, top: 16, // Positioned top-right
+         border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 2, zIndex: 10,
+       }}>
+         <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold', mb: 1 }}>Legend</Typography>
+         {moduleTypes.map((type) => (
+           <Box key={type.name} sx={{ display: 'flex', alignItems: 'center', mb: 0.8 }}>
+             <Box component="img" src={getSpritePath(type.name)} alt={type.displayName} sx={{ width: 20, height: 20, mr: 1, objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}/>
+             <Typography variant="caption" sx={{ color: 'white', fontWeight: 'medium' }}>{type.displayName}</Typography>
+           </Box>
+         ))}
+       </Paper>
+     );
+   }, []); // Static
 
-    return (
-      <Paper elevation={3} sx={{
-        p: 1.5,
-        width: 180,
-        backgroundColor: 'rgba(32, 20, 52, 0.9)',
-        position: 'absolute', // Position relative to the React Flow container Box
-        right: 16,            // Distance from right edge
-        top: 16,             // Distance from top edge
-        border: '1px solid rgba(255, 255, 255, 0.2)',
-        borderRadius: 2,
-        zIndex: 10,          // Ensure it's above React Flow elements
-      }}>
-        <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold', mb: 1 }}>
-          Legend
-        </Typography>
-        {/* Iterate over the defined module types to create legend items */}
-        {moduleTypes.map((type) => (
-          <Box key={type.name} sx={{ display: 'flex', alignItems: 'center', mb: 0.8 }}>
-            {/* Display the module sprite */}
-            <Box
-              component="img"
-              // Use the helper function to get the correct sprite path
-              src={getSpritePath(type.name)}
-              alt={type.displayName}
-              sx={{
-                width: 20, // Consistent small image size
-                height: 20,
-                mr: 1,
-                objectFit: 'contain', // Ensure sprite fits well
-                filter: 'brightness(1.1)', // Slight brightness increase
-              }}
-              // Hide the image element if the sprite fails to load
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-            {/* Display the module type name */}
-            <Typography variant="caption" sx={{ color: 'white', fontWeight: 'medium' }}>
-              {type.displayName}
-            </Typography>
-          </Box>
-        ))}
-      </Paper>
-    );
-  // The content of the legend is static based on the hardcoded moduleTypes array,
-  // so the dependency array is empty. It only needs to compute once.
-  }, []); // Empty dependency array
-
-  // Memoized Constraints Status Panel
   const ConstraintsPanelElement = useMemo(() => {
-    // Calculate totals... (same logic as before using resultModules)
-    const totals = resultModules.reduce((acc, mod) => { /* ... calculation logic ... */ return acc; }, { price: 0, power: 0, cooling: 0, processing: 0, maxX: 0, maxY: 0 });
+    const totals = resultModules.reduce((acc, mod) => {
+        const ioFields = Array.isArray(mod.io_fields) ? mod.io_fields : [];
+        const priceIO = ioFields.find(io => io && io.unit === 'Price'); acc.price += priceIO?.amount || 0;
+        acc.power += ioFields.find(io => io && !io.is_input && io.unit === 'Power')?.amount || 0;
+        acc.cooling += ioFields.find(io => io && !io.is_input && io.unit === 'Cooling')?.amount || 0;
+        acc.processing += ioFields.find(io => io && !io.is_input && io.unit === 'Processing')?.amount || 0;
+        const gCol=mod.gridColumn??1; const gRow=mod.gridRow??1; const w=mod.width??1; const h=mod.height??1;
+        acc.maxX = Math.max(acc.maxX, gCol + w - 1); acc.maxY = Math.max(acc.maxY, gRow + h - 1);
+        return acc;
+      }, { price: 0, power: 0, cooling: 0, processing: 0, maxX: 0, maxY: 0 });
     const maxPriceNum = parseFloat(constraints.maxPrice) || Infinity;
-    // ... other max values and checks ...
-    const formatConstraint = (v: number, m: number) => {/* ... */}; const getPercentage = (v: number, m: number) => {/* ... */};
+    const maxSpaceXNum = parseFloat(constraints.maxSpaceX) || Infinity;
+    const maxSpaceYNum = parseFloat(constraints.maxSpaceY) || Infinity;
+    const isPriceInLimit = totals.price <= maxPriceNum; const isSpaceXInLimit = totals.maxX <= maxSpaceXNum; const isSpaceYInLimit = totals.maxY <= maxSpaceYNum;
+    const formatConstraint = (v: number, m: number) => { const vs=v.toFixed(0); return (!isFinite(m)||m===0)?`${vs}/∞`:`${vs}/${m.toFixed(0)}`; };
+    const getPercentage = (v: number, m: number) => ((!isFinite(m)||m<=0)?'0%':`${Math.min(100,(v/m)*100).toFixed(0)}%`);
     return (
       <Paper elevation={3} sx={{
         p: 1.5, width: 220, backgroundColor: 'rgba(32, 20, 52, 0.9)',
         position: 'absolute', left: 16, top: 16, // Positioned top-left
         border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 2, zIndex: 10,
       }}>
-        {/* ... Panel content using totals, constraints, formatters ... */}
         <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold', mb: 1.5 }}>Status</Typography>
-        {/* ... Bars for Price, Space X, Space Y ... */}
-        {/* ... Production totals ... */}
+        <Box sx={{ mb: 1.5 }}><Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Price:</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}><Box sx={{ height: '100%', width: getPercentage(totals.price, maxPriceNum), bgcolor: isPriceInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} /></Box><Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>{formatConstraint(totals.price, maxPriceNum)}</Typography></Box></Box>
+        <Box sx={{ mb: 1.5 }}><Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Space X (Cells):</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}><Box sx={{ height: '100%', width: getPercentage(totals.maxX, maxSpaceXNum), bgcolor: isSpaceXInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} /></Box><Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>{formatConstraint(totals.maxX, maxSpaceXNum)}</Typography></Box></Box>
+        <Box sx={{ mb: 2 }}><Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Space Y (Cells):</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}><Box sx={{ height: '100%', width: getPercentage(totals.maxY, maxSpaceYNum), bgcolor: isSpaceYInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} /></Box><Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>{formatConstraint(totals.maxY, maxSpaceYNum)}</Typography></Box></Box>
+        <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold', mt: 2, mb: 1 }}>Production</Typography>
+        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}><Typography variant="caption" sx={{ color: 'white' }}>Power:</Typography><Typography variant="caption" sx={{ color: '#4caf50', fontWeight:'bold' }}>{totals.power.toFixed(2)}</Typography></Box>
+        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}><Typography variant="caption" sx={{ color: 'white' }}>Cooling:</Typography><Typography variant="caption" sx={{ color: '#2196f3', fontWeight:'bold' }}>{totals.cooling.toFixed(2)}</Typography></Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="caption" sx={{ color: 'white' }}>Processing:</Typography><Typography variant="caption" sx={{ color: '#ff9800', fontWeight:'bold' }}>{totals.processing.toFixed(2)}</Typography></Box>
       </Paper>
     );
-  }, [resultModules, constraints]); // Depends on data
+  }, [resultModules, constraints]);
 
 
   // --- Component Render ---
   return (
-    <Box sx={{
-        height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', paddingTop: '1rem', paddingBottom: '1rem',
-        gap: 1, backgroundColor: '#201434', overflow: 'hidden',
-    }}>
-      {/* Header Controls */}
+    <Box sx={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', alignItems: 'center', p: '1rem', gap: 1, bgcolor: '#201434', overflow: 'hidden' }}>
+      {/* Header */}
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', width: '95%', justifyContent: 'center', flexWrap: 'wrap', mb: 1 }}>
          <FormControl size="small" sx={{ minWidth: 180, mb: { xs: 1, md: 0 } }}>
             <InputLabel id="dc-select-label" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Load Datacenter</InputLabel>
@@ -493,47 +415,38 @@ const MainPage = () => {
       </Box>
 
       {/* React Flow Area Container */}
-      <Box sx={{
-          width: '95%', height: '100%', minHeight: '400px',
-          position: 'relative', // For overlay positioning
-          border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 2,
-          overflow: 'hidden', backgroundColor: '#281f3d',
-      }}>
+      <Box sx={{ width: '95%', height: '100%', minHeight: '400px', position: 'relative', border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 2, overflow: 'hidden', bgcolor: '#281f3d' }}>
         <ReactFlow
-            nodes={nodes} // Includes modules + boundary node
-            edges={edges}
-            onNodesChange={onNodesChange}
+            nodes={nodes} edges={edges}
+            onNodesChange={onNodesChange} // Handles internal node events (like dragging position update)
             onEdgesChange={onEdgesChange}
-            onNodeDragStop={onNodeDragStop} // Implements snapping
-            onMoveEnd={handleViewportChange}
-            nodeTypes={nodeTypes} // Includes custom module and boundary nodes
+            onNodeDragStop={onNodeDragStop} // Apply final snapping and validation
+            onMoveEnd={handleViewportChange} // Update zoom display
+            nodeTypes={nodeTypes}
             defaultViewport={{ x: 0, y: 0, zoom: 0.75 }}
             minZoom={0.05} maxZoom={4}
             fitViewOptions={{ padding: 0.25, duration: 300 }}
             nodesDraggable={true} selectNodesOnDrag={true}
             proOptions={{ hideAttribution: true }}
+            // Important: snapToGrid prop applies visual snap *during* drag
+            snapToGrid={true}
+            snapGrid={[CELL_SIZE, CELL_SIZE]} // Snap visually to the grid size
             style={{ width: '100%', height: '100%' }}
           >
           <Controls showInteractive={false}/>
           <Background variant="dots" gap={CELL_SIZE} size={1.5} color="#443a5f" />
         </ReactFlow>
 
-        {/* Overlays: Legend and Constraints Panel */}
-        {/* Conditionally render based on whether modules exist */}
+        {/* Overlays */}
         {resultModules.length > 0 && ModuleLegendElement}
         {resultModules.length > 0 && ConstraintsPanelElement}
 
-        {/* Bottom Status Indicator Bar */}
-        <Box sx={{
-            position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 10,
-            padding: '4px 12px', backgroundColor: 'rgba(0,0,0,0.75)', color: 'rgba(255,255,255,0.8)',
-            borderRadius: 1, fontSize: '0.75rem', display: 'flex', gap: 2, alignItems: 'center', whiteSpace: 'nowrap',
-        }}>
+        {/* Bottom Status Bar */}
+        <Box sx={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 10, padding: '4px 12px', bgcolor: 'rgba(0,0,0,0.75)', color: 'rgba(255,255,255,0.8)', borderRadius: 1, fontSize: '0.75rem', display: 'flex', gap: 2, alignItems: 'center', whiteSpace: 'nowrap' }}>
            <Typography variant="caption">Grid: {constraints.maxSpaceX || '?'}×{constraints.maxSpaceY || '?'} Cells</Typography>
            <Typography variant="caption" sx={{color: 'rgba(255,255,255,0.4)'}}>|</Typography>
            <Typography variant="caption">Zoom: {(currentZoom ?? 1).toFixed(2)}x</Typography>
            <Typography variant="caption" sx={{color: 'rgba(255,255,255,0.4)'}}>|</Typography>
-           {/* Display count of actual module nodes, excluding the boundary */}
            <Typography variant="caption">Nodes: {nodes.filter(n => n.id !== BOUNDARY_NODE_ID).length}</Typography>
         </Box>
       </Box>
@@ -541,52 +454,34 @@ const MainPage = () => {
   );
 };
 
-// Wrap MainPage with ReactFlowProvider to enable hook usage
-const MainPageWrapper = () => (
-  <ReactFlowProvider>
-    <MainPage />
-  </ReactFlowProvider>
-);
-
+// Wrap with Provider
+const MainPageWrapper = () => ( <ReactFlowProvider><MainPage /></ReactFlowProvider> );
 export default MainPageWrapper;
 
-// --- src/types.ts (Example - Ensure your file matches this structure) ---
+// --- types.ts reminder ---
 /*
 export interface IOField {
     is_input: boolean;
-    is_output?: boolean; // Make optional if not always present
+    is_output?: boolean;
     unit: string;
     amount: number;
 }
-
 export interface Module {
-    id: string; // Expect string ID from backend
+    id: string;
     name: string;
     io_fields: IOField[];
 }
-
 export interface PositionedModule extends Module {
     gridColumn: number;
     gridRow: number;
     height: number; // In cells
     width: number;  // In cells
 }
-
 export interface SpecRule {
-    Below_Amount?: number;
-    Above_Amount?: number;
-    Minimize?: number;
-    Maximize?: number;
-    Unconstrained?: number;
-    Unit: string; // The key identifier (e.g., "space_x", "price")
-    Amount?: number; // The value associated with the unit (e.g., 1000, 50000)
+    Below_Amount?: number; Above_Amount?: number; Minimize?: number; Maximize?: number; Unconstrained?: number;
+    Unit: string; Amount?: number;
 }
-
 export interface DataCenter {
-    id: number;
-    name: string;
-    specs: SpecRule[]; // Array of constraint rules
-    details?: Record<string, number>; // Optional key-value details
-    modules: PositionedModule[]; // Expects modules to have position info from backend
+    id: number; name: string; specs: SpecRule[]; details?: Record<string, number>; modules: PositionedModule[];
 }
 */
