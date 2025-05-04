@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
 import './GalleryPage.css'; // Import the CSS file
+import mongoImage from './mongo.png';
+import dist1 from './dist1.jpg';
+import dist2 from './dist2.png';
+import dist3 from './dist3.jpg';
+
 import {
   Box,
   Typography,
@@ -19,6 +24,7 @@ import {
   DialogActions,
   Button,
   CardActionArea, // Import CardActionArea
+  CardMedia, // Add CardMedia for displaying images
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info'; // Optional: Icon for info cards
@@ -67,12 +73,14 @@ const ICON_MAP: Record<string, string> = {
 interface InfoContent {
   title: string;
   description: React.ReactNode; // Use ReactNode for potentially richer content
+  image?: string; // Optional image for the info section
 }
 
 const GalleryPage = () => { // Renamed component to GalleryPage based on error message
   const [modules, setModules] = useState<Module[]>([]);
   const [isInfoDialogOpen, setIsInfoDialogOpen] = useState<boolean>(false);
   const [dialogContent, setDialogContent] = useState<InfoContent | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
 
   // Fetch modules on component mount
   useEffect(() => {
@@ -108,15 +116,25 @@ const GalleryPage = () => { // Renamed component to GalleryPage based on error m
             Key characteristics captured for each module include:
           </Typography>
           <ul>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Name and Type (e.g., Server Rack, Water Chiller)</Typography></li>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Input Requirements (e.g., Power in kW, Water in L/s)</Typography></li>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Output Resources/Capacities (e.g., Cooling Capacity in kW, Data Ports)</Typography></li>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Physical Dimensions (Space_X, Space_Y)</Typography></li>
+            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Name and Type</Typography></li>
+            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Input Requirements</Typography></li>
+            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Output Resources/Capacities</Typography></li>
+            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Physical Dimensions</Typography></li>
             <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Cost (Price)</Typography></li>
           </ul>
           <Typography variant="body1" sx={{ mt: 2 }}>
             This gallery below displays all modules available in the current dataset, grouped by their functional type.
           </Typography>
+          <Typography variant="body1" sx={{ mt: 2 }}>
+            MongoDB is used to store the dataset, and the application fetches data from it using a REST API.
+          </Typography>
+          {/* <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <img 
+                src={mongoImage}
+                alt="MILP Optimization Diagram" 
+                style={{ maxWidth: '100%', borderRadius: '4px' }}
+            />
+          </Box> */}
         </>
       ),
     },
@@ -147,19 +165,6 @@ const GalleryPage = () => { // Renamed component to GalleryPage based on error m
           <Typography variant="body1" sx={{ mt: 2 }}>
             The solver attempts to find the best integer values for each module count that satisfies all constraints while optimizing the objective.
           </Typography>
-          
-          <Typography variant="body2" sx={{ color: '#bdbdbd', mt: 2 }}>
-            For example, the MILP model might determine you need:
-          </Typography>
-          <ul>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>5 transformer modules</Typography></li>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>3 water chillers</Typography></li>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>20 server racks</Typography></li>
-          </ul>
-          
-          <Typography variant="body1" sx={{ mt: 2 }}>
-            This mathematical approach ensures resource-efficient data center designs while meeting all operational requirements.
-          </Typography>
         </>
       ),
     },
@@ -175,13 +180,30 @@ const GalleryPage = () => { // Renamed component to GalleryPage based on error m
           </Typography>
            <ul>
             <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Minimizing cable lengths and infrastructure costs.</Typography></li>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Ensuring efficient airflow and cooling.</Typography></li>
-            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Adhering to physical constraints (e.g., floor load, room dimensions).</Typography></li>
+            <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Adhering to physical constraints.</Typography></li>
             <li><Typography variant="body2" sx={{ color: '#bdbdbd' }}>Facilitating maintenance access.</Typography></li>
           </ul>
-          <Typography variant="body1" sx={{ mt: 2 }}>
-            This is often visualized in a 2D or 3D layout planner where users can drag, drop, and connect modules. Optimization algorithms can also assist in finding efficient placements.
-          </Typography>
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <img 
+                src={dist1}
+                alt="Modules Distributions Diagrams" 
+                style={{ maxWidth: '100%', borderRadius: '4px' }}
+            />
+          </Box>
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <img 
+                src={dist2}
+                alt="Modules Distributions Diagrams with restrictions" 
+                style={{ maxWidth: '100%', borderRadius: '4px' }}
+            />
+          </Box>
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <img 
+                src={dist3}
+                alt="Modules Distribution in the final layout" 
+                style={{ maxWidth: '100%', borderRadius: '4px' }}
+            />
+          </Box>
         </>
       ),
     },
@@ -211,9 +233,6 @@ const GalleryPage = () => { // Renamed component to GalleryPage based on error m
 
       {/* --- Info Cards Section --- */}
       <Box sx={{ mb: 5 }}> {/* Add margin below the info cards */}
-        <Typography variant="h5" sx={{ color: '#bdbdbd', mb: 2, textAlign: 'center' }}>
-           Application Overview
-        </Typography>
         {/* Modified grid to stack vertically and make boxes wider */}
         <Grid container spacing={3} direction="column" alignItems="center">
           {Object.entries(infoSections).map(([key, content]) => (
