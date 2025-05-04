@@ -827,7 +827,7 @@ const MainPage = () => {
     return (
       <Paper elevation={3} sx={{
         p: 1.5, width: 220, backgroundColor: 'rgba(32, 20, 52, 0.9)',
-        position: 'absolute', left: 16, top: 16, // Positioned top-left
+        position: 'absolute', right: 16, bottom: 16, // Positioned top-left
         border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 2, zIndex: 10,
       }}>
         <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold', mb: 1.5 }}>Status</Typography>
