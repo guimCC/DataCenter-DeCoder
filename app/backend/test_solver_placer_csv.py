@@ -5,7 +5,7 @@ import matplotlib.patches as patches
 import numpy as np
 from collections import defaultdict
 
-from solver_utils_list import solve_module_list
+from solver_utils_list import _solve_module_list
 from solver_utils_placement import solve_module_placement
 from models import Module, IOField
 
@@ -209,7 +209,7 @@ def test_spec_placement(spec_id):
 
     # --- 4. Run Module Selection ---
     print("\n--- Running Module Selection ---")
-    selected_counts, net_resources = solve_module_list(available_modules, specs, weights)
+    selected_counts, net_resources = _solve_module_list(available_modules, specs, weights)
 
     if not selected_counts:
         print("Module selection failed or returned empty solution.")

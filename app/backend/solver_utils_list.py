@@ -19,7 +19,7 @@ def standardize_unit_name(name):
     return str(name).strip().lower().replace(' ', '_')
 
 
-def solve_module_list(modules: list[Module], specs: list[dict], weights: dict, initial_resources: dict = None) -> tuple[dict, dict]:
+def _solve_module_list(modules: list[Module], specs: list[dict], weights: dict, initial_resources: dict = None) -> tuple[dict, dict]:
     """
     Solves the resource optimization problem to select the best module counts.
 
@@ -470,4 +470,4 @@ def solve_module_list_with_fixed_modules(modules: list[Module], specs: list[dict
         print(f"Calculated Initial Resources from Fixed Modules: {initial_resources_from_fixed}")
 
     # Call the main solver function with the calculated initial resources
-    return solve_module_list(modules, specs, weights, initial_resources=initial_resources_from_fixed)
+    return _solve_module_list(modules, specs, weights, initial_resources=initial_resources_from_fixed)

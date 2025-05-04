@@ -1,7 +1,7 @@
 import csv
 import os
 from collections import defaultdict
-from solver_utils_list import solve_module_list
+from solver_utils_list import _solve_module_list
 from models import Module, IOField # Changed import source
 
 # --- Define file paths relative to this script ---
@@ -99,7 +99,7 @@ print(f"Using weights: {weights}")
 
 # --- 4. Call the Function ---
 print("--- Running Test ---")
-selected_counts, net_resources = solve_module_list(available_modules, specs, weights)
+selected_counts, net_resources = _solve_module_list(available_modules, specs, weights)
 
 # --- 5. Print Results ---
 print("\n--- Test Results ---")

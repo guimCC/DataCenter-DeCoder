@@ -10,7 +10,7 @@ from models import Module, IOField, PositionedModule, SpecRule, DataCenter
 # MongoDB
 from mongo_utils import insert_modules, get_all_modules, get_database
 
-from solver_utils_list import solve_module_list, solve_module_list_with_fixed_modules
+from solver_utils_list import _solve_module_list, solve_module_list_with_fixed_modules
 from solver_utils_placement import solve_module_placement
 
 app = FastAPI()
