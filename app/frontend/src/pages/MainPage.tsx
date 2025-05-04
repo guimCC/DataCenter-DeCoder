@@ -767,9 +767,9 @@ const MainPage = () => {
               name: m.name,
               instanceId: m.instanceId || generateUniqueId(`refined_${m.id}`), 
               gridColumn: Number(m.gridColumn || 1),
-              gridRow: Number(m.gridRow || 1),
-              width: Number(m.width || 1),
-              height: Number(m.height || 1),
+              gridRow: Number(m.gridRow|| 1),
+              width: Number(m.width|| 1),
+              height: Number(m.height|| 1),
               io_fields: m.io_fields || []
             }));
             
@@ -1015,28 +1015,78 @@ const MainPage = () => {
     }, [activeConstraints, nodes, RESOURCE_UNIT_MAP, createNodesFromModules, generateUniqueId]);
 
     const handleSaveDatacenter = useCallback(() => {
+      // Calculate resource totals for the details object
+      const details = resultModules.reduce((acc, mod) => {
+        if (!mod || !mod.io_fields) return acc;
+        
+        const ioFields = Array.isArray(mod.io_fields) ? mod.io_fields : [];
+        
+        // Process all io_fields to accumulate values
+        ioFields.forEach(io => {
+          if (!io || !io.unit) return;
+          
+          // Convert unit name to lowercase for consistency
+          const unitKey = io.unit.toLowerCase();
+          
+          // Initialize if needed
+          if (acc[unitKey] === undefined) {
+            acc[unitKey] = 0;
+          }
+          
+          // Add the amount
+          acc[unitKey] += io.amount || 0;
+        });
+        
+        return acc;
+      }, {});
+      
+      // Calculate grid usage (space_x and space_y)
+      let maxX = 0;
+      let maxY = 0;
+      resultModules.forEach(mod => {
+        const rightEdge = mod.gridColumn + mod.width;
+        const bottomEdge = mod.gridRow + mod.height;
+        maxX = Math.max(maxX, rightEdge);
+        maxY = Math.max(maxY, bottomEdge);
+      });
+      
+      // Update space details
+      details.space_x = maxX;
+      details.space_y = maxY;
+      
       // Prepare the datacenter object to save
       const datacenterToSave = {
         name: saveName,
+        // Convert all specs to use lowercase unit names
         specs: [
-          { Unit: 'Space_X', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols },
-          { Unit: 'Space_Y', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows }
+          { Unit: 'space_x', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols },
+          { Unit: 'space_y', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows }
         ],
+        details: details,
+        // Format modules with proper numeric IDs and empty io_fields
         modules: resultModules.map(mod => ({
-          ...mod,
-          id: mod.id.toString().replace(/^dc_\d+_(\d+)_\d+$/, '$1') // Extract original ID if it's a loaded DC module
+          // Extract numeric ID from any format (string or with prefixes)
+          id: parseInt(mod.id.toString().replace(/^.*?(\d+)(?:_.*)?$/, '$1')),
+          name: mod.name,
+          io_fields: [], // Send empty io_fields as they come from the backend
+          gridColumn: mod.gridColumn,
+          gridRow: mod.gridRow,
+          width: mod.width,
+          height: mod.height
         }))
       };
       
+      // Add price constraint if provided
       if (constraints.maxPrice) {
         datacenterToSave.specs.push({
-          Unit: 'Price', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseFloat(constraints.maxPrice)
+          Unit: 'price', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseFloat(constraints.maxPrice)
         });
       }
     
-      // Add any specs from active constraints
+      // Add constraints from active constraints
       activeConstraints.forEach(constraint => {
-        const unit = RESOURCE_UNIT_MAP[constraint.resource];
+        // Convert constraint resource to lowercase unit name
+        const unit = RESOURCE_UNIT_MAP[constraint.resource].toLowerCase();
         const spec = {
           Unit: unit,
           Below_Amount: constraint.operation === 'Below Value' ? 1 : 0,
@@ -1044,7 +1094,8 @@ const MainPage = () => {
           Minimize: constraint.operation === 'Minimize' ? 1 : 0,
           Maximize: constraint.operation === 'Maximize' ? 1 : 0,
           Unconstrained: 0,
-          Amount: parseFloat(constraint.value)
+          Amount: constraint.operation === 'Below Value' || constraint.operation === 'Above Value' ? 
+            parseFloat(constraint.value) : (constraint.operation === 'Maximize' ? -1 : null)
         };
         datacenterToSave.specs.push(spec);
       });
@@ -1055,6 +1106,7 @@ const MainPage = () => {
         ? `http://localhost:8000/datacenters/${selectedDC}` 
         : "http://localhost:8000/datacenters";
       
+      console.log("Saving datacenter:", datacenterToSave);
       setIsLoading(true);
       
       fetch(url, {
@@ -1204,40 +1256,169 @@ const MainPage = () => {
      );
    }, []); // Static
 
-  const ConstraintsPanelElement = useMemo(() => {
+   const ConstraintsPanelElement = useMemo(() => {
+    // Initialize statistics tracker with all resources from RESOURCE_UNIT_MAP
     const totals = resultModules.reduce((acc, mod) => {
-        const ioFields = Array.isArray(mod.io_fields) ? mod.io_fields : [];
-        const priceIO = ioFields.find(io => io && io.unit === 'Price'); acc.price += priceIO?.amount || 0;
-        acc.power += ioFields.find(io => io && !io.is_input && io.unit === 'Power')?.amount || 0;
-        acc.cooling += ioFields.find(io => io && !io.is_input && io.unit === 'Cooling')?.amount || 0;
-        acc.processing += ioFields.find(io => io && !io.is_input && io.unit === 'Processing')?.amount || 0;
-        const gCol=mod.gridColumn??1; const gRow=mod.gridRow??1; const w=mod.width??1; const h=mod.height??1;
-        acc.maxX = Math.max(acc.maxX, gCol + w - 1); acc.maxY = Math.max(acc.maxY, gRow + h - 1);
-        return acc;
-      }, { price: 0, power: 0, cooling: 0, processing: 0, maxX: 0, maxY: 0 });
+      if (!mod || !mod.io_fields) return acc;
+      
+      const ioFields = Array.isArray(mod.io_fields) ? mod.io_fields : [];
+      
+      // Track price (special case, always counted regardless of input/output)
+      const priceIO = ioFields.find(io => io && io.unit === 'Price');
+      if (priceIO) acc.price += priceIO.amount || 0;
+      
+      // Track each resource based on RESOURCE_UNIT_MAP
+      for (const [resourceName, unitName] of Object.entries(RESOURCE_UNIT_MAP)) {
+        const resourceType = getResourceType(resourceName as Resource);
+        const isOutputResource = resourceType === 'OUTPUT';
+        
+        // Find matching field (matching unit AND correct input/output direction)
+        const match = ioFields.find(io => 
+          io && 
+          io.unit === unitName && 
+          (isOutputResource ? !io.is_input : io.is_input)
+        );
+        
+        if (match) {
+          // Initialize if needed
+          if (!acc[resourceName.toLowerCase()]) acc[resourceName.toLowerCase()] = 0;
+          acc[resourceName.toLowerCase()] += match.amount || 0;
+        }
+      }
+      
+      // Track space usage (X and Y dimensions)
+      if (mod.gridColumn > 0 && mod.gridRow > 0) {
+        const rightEdge = (mod.gridColumn || 0) + (mod.width || 0);
+        const bottomEdge = (mod.gridRow || 0) + (mod.height || 0);
+        acc.maxX = Math.max(acc.maxX, rightEdge);
+        acc.maxY = Math.max(acc.maxY, bottomEdge);
+      }
+      
+      return acc;
+    }, {
+      price: 0,
+      grid_connection: 0,
+      water_connection: 0,
+      external_network: 0,
+      data_storage: 0,
+      processing: 0,
+      maxX: 0,
+      maxY: 0
+    });
+    
+    // Process constraints and limits
     const maxPriceNum = parseFloat(constraints.maxPrice) || Infinity;
     const maxSpaceXNum = parseFloat(constraints.maxSpaceX) || Infinity;
     const maxSpaceYNum = parseFloat(constraints.maxSpaceY) || Infinity;
-    const isPriceInLimit = totals.price <= maxPriceNum; const isSpaceXInLimit = totals.maxX <= maxSpaceXNum; const isSpaceYInLimit = totals.maxY <= maxSpaceYNum;
-    const formatConstraint = (v: number, m: number) => { const vs=v.toFixed(0); return (!isFinite(m)||m===0)?`${vs}/∞`:`${vs}/${m.toFixed(0)}`; };
-    const getPercentage = (v: number, m: number) => ((!isFinite(m)||m<=0)?'0%':`${Math.min(100,(v/m)*100).toFixed(0)}%`);
+    
+    // Check if values are within limits
+    const isPriceInLimit = totals.price <= maxPriceNum; 
+    const isSpaceXInLimit = totals.maxX <= maxSpaceXNum; 
+    const isSpaceYInLimit = totals.maxY <= maxSpaceYNum;
+    
+    // Format helpers
+    const formatConstraint = (v: number, m: number) => {
+      const vs = v.toLocaleString(undefined, {maximumFractionDigits: 0});
+      return (!isFinite(m) || m === 0) ? `${vs}/∞` : `${vs}/${m.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    };
+    
+    const getPercentage = (v: number, m: number) => {
+      return (!isFinite(m) || m <= 0) ? '0%' : `${Math.min(100, (v/m)*100).toFixed(0)}%`;
+    };
+    
+    // Render the panel
     return (
       <Paper elevation={3} sx={{
         p: 1.5, width: 220, backgroundColor: 'rgba(32, 20, 52, 0.9)',
-        position: 'absolute', right: 16, bottom: 16, // Positioned top-left
+        position: 'absolute', right: 16, bottom: 16,
         border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 2, zIndex: 10,
       }}>
         <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold', mb: 1.5 }}>Status</Typography>
-        <Box sx={{ mb: 1.5 }}><Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Price:</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}><Box sx={{ height: '100%', width: getPercentage(totals.price, maxPriceNum), bgcolor: isPriceInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} /></Box><Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>{formatConstraint(totals.price, maxPriceNum)}</Typography></Box></Box>
-        <Box sx={{ mb: 1.5 }}><Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Space X (Cells):</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}><Box sx={{ height: '100%', width: getPercentage(totals.maxX, maxSpaceXNum), bgcolor: isSpaceXInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} /></Box><Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>{formatConstraint(totals.maxX, maxSpaceXNum)}</Typography></Box></Box>
-        <Box sx={{ mb: 2 }}><Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Space Y (Cells):</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}><Box sx={{ height: '100%', width: getPercentage(totals.maxY, maxSpaceYNum), bgcolor: isSpaceYInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} /></Box><Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>{formatConstraint(totals.maxY, maxSpaceYNum)}</Typography></Box></Box>
+        
+        {/* Price Status Bar */}
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Price:</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: getPercentage(totals.price, maxPriceNum), bgcolor: isPriceInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} />
+            </Box>
+            <Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>
+              {formatConstraint(totals.price, maxPriceNum)}
+            </Typography>
+          </Box>
+        </Box>
+        
+        {/* Space X Status Bar */}
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Space X (Cells):</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: getPercentage(totals.maxX, maxSpaceXNum), bgcolor: isSpaceXInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} />
+            </Box>
+            <Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>
+              {formatConstraint(totals.maxX, maxSpaceXNum)}
+            </Typography>
+          </Box>
+        </Box>
+        
+        {/* Space Y Status Bar */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" sx={{ color: 'white', mb: 0.5, display:'block' }}>Space Y (Cells):</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: getPercentage(totals.maxY, maxSpaceYNum), bgcolor: isSpaceYInLimit?'#4caf50':'#f44336', transition:'width 0.3s ease' }} />
+            </Box>
+            <Typography variant="caption" sx={{ color: 'white', minWidth: 60, textAlign:'right', fontFamily:'monospace' }}>
+              {formatConstraint(totals.maxY, maxSpaceYNum)}
+            </Typography>
+          </Box>
+        </Box>
+        
+        {/* Production Stats */}
         <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold', mt: 2, mb: 1 }}>Production</Typography>
-        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}><Typography variant="caption" sx={{ color: 'white' }}>Power:</Typography><Typography variant="caption" sx={{ color: '#4caf50', fontWeight:'bold' }}>{totals.power.toFixed(2)}</Typography></Box>
-        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}><Typography variant="caption" sx={{ color: 'white' }}>Cooling:</Typography><Typography variant="caption" sx={{ color: '#2196f3', fontWeight:'bold' }}>{totals.cooling.toFixed(2)}</Typography></Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="caption" sx={{ color: 'white' }}>Processing:</Typography><Typography variant="caption" sx={{ color: '#ff9800', fontWeight:'bold' }}>{totals.processing.toFixed(2)}</Typography></Box>
+        
+        {/* Grid Connection (Power) */}
+        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+          <Typography variant="caption" sx={{ color: 'white' }}>Power:</Typography>
+          <Typography variant="caption" sx={{ color: '#4caf50', fontWeight:'bold' }}>
+            {totals.grid_connection.toLocaleString(undefined, {maximumFractionDigits: 2})}
+          </Typography>
+        </Box>
+        
+        {/* External Network */}
+        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+          <Typography variant="caption" sx={{ color: 'white' }}>Network:</Typography>
+          <Typography variant="caption" sx={{ color: '#2196f3', fontWeight:'bold' }}>
+            {totals.external_network.toLocaleString(undefined, {maximumFractionDigits: 2})}
+          </Typography>
+        </Box>
+        
+        {/* Data Storage */}
+        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+          <Typography variant="caption" sx={{ color: 'white' }}>Storage:</Typography>
+          <Typography variant="caption" sx={{ color: '#9c27b0', fontWeight:'bold' }}>
+            {totals.data_storage.toLocaleString(undefined, {maximumFractionDigits: 2})}
+          </Typography>
+        </Box>
+        
+        {/* Processing */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+          <Typography variant="caption" sx={{ color: 'white' }}>Processing:</Typography>
+          <Typography variant="caption" sx={{ color: '#ff9800', fontWeight:'bold' }}>
+            {totals.processing.toLocaleString(undefined, {maximumFractionDigits: 2})}
+          </Typography>
+        </Box>
+        
+        {/* Water Connection */}
+        <Box sx={{ mt: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+          <Typography variant="caption" sx={{ color: 'white' }}>Water:</Typography>
+          <Typography variant="caption" sx={{ color: '#00bcd4', fontWeight:'bold' }}>
+            {totals.water_connection.toLocaleString(undefined, {maximumFractionDigits: 2})}
+          </Typography>
+        </Box>
       </Paper>
     );
-  }, [resultModules, constraints]);
+  }, [resultModules, constraints, RESOURCE_UNIT_MAP]);
 
 
   // --- Component Render ---
