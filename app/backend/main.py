@@ -10,7 +10,7 @@ from models import Module, IOField, PositionedModule, SpecRule, DataCenter
 # MongoDB
 from mongo_utils import insert_modules, get_all_modules, get_database
 
-from app.backend.solver_utils_list import solve_module_list
+from app.backend.solver_utils_list import solve_module_list, solve_module_list_with_fixed_modules
 from app.backend.solver_utils_placement import solve_module_placement
 
 app = FastAPI()
@@ -90,27 +90,21 @@ async def solve_dummy():
         mod["gridRow"] = 1 + 5 * i
         positioned.append(mod)
 
-    return {"modules": positioned}
+    return {"modules": positioned}    
 
 
-# POST: solve layout
-@app.post("/solve-dummy")
-async def solve(specs, weights):
+# POST: solve problem and get list, with given fixed modules
+@app.post('/solve-components')
+async def solve_components_with_fixed_modules(specs, weights, fixed_modules: list[Module] = [] ):
     modules = get_modules()
-
-    # solve for the list of modules
-    module_list = solve_module_list(modules, specs, weights)
-    
-    # solve for the location given the list of modules
-    return solve_module_placement(modules, specs, weights, module_list)
+    return solve_module_list_with_fixed_modules(modules, specs, weights, fixed_modules)
 
 
-# POST: get layout components list
-@app.post
-async def get_layout_components_list(specs, weights):
+# POST: solve problem and get list, with given fixed modules
+@app.post('/solve-placements')
+def solve_placements(specs, module_list, fixed_modules: list[Module]):
     modules = get_modules()
-    return solve_module_list(modules, specs, weights)
-
+    return solve_module_placement(modules, specs, module_list)
 
 
 # DELETE: delete a module
