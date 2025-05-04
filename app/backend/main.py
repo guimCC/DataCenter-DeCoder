@@ -12,6 +12,7 @@ from mongo_utils import insert_modules, get_all_modules, get_database
 
 from solver_utils_list import _solve_module_list, solve_module_list_with_fixed_modules
 from solver_utils_placement import solve_module_placement
+import ast
 
 app = FastAPI()
 
@@ -97,7 +98,10 @@ async def solve_dummy():
 @app.post('/solve-components')
 async def solve_components_with_fixed_modules(specs, weights, fixed_modules: list[Module] = [] ):
     modules = get_modules()
-    return solve_module_list_with_fixed_modules(modules, specs, weights, fixed_modules)
+    weights = ast.literal_eval(weights)
+    sol = solve_module_list_with_fixed_modules(modules, specs, weights, fixed_modules)
+    print(sol)
+    return sol
 
 
 # POST: solve problem for the placements of the modules of module_list, possibly with fixed_modules

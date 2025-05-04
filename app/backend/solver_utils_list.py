@@ -2,6 +2,8 @@ from models import Module
 import pulp
 import time
 import math # For checking NaN
+import ast  # Add this at the top of the file with other imports
+
 
 # --- Constants ---
 INPUT_RESOURCES = ['price', 'grid_connection', 'water_connection']
@@ -58,11 +60,12 @@ def _solve_module_list(modules: list[Module], specs: list[dict], weights: dict, 
     module_data = {}
     module_ids = []
     if not modules:
-        print("Error: No modules provided.")
+        # print("Error: No modules provided.")
         return {}, {}
 
     for mod in modules:
-        mod_id = mod.id # Correct: Module class has 'id'
+        # print(mod)
+        mod_id = mod['id'] # Correct: Module class has 'id'
         module_ids.append(mod_id)
         inputs = {}
         outputs = {}
@@ -70,18 +73,18 @@ def _solve_module_list(modules: list[Module], specs: list[dict], weights: dict, 
         mod_height = 0
 
         # Process io_fields to populate inputs, outputs, width, height
-        for field in mod.io_fields: # Iterate through io_fields list
-            unit = standardize_unit_name(field.unit)
-            amount = field.amount
+        for field in mod['io_fields']: # Iterate through io_fields list
+            unit = standardize_unit_name(field['unit'])
+            amount = field['amount']
 
-            if unit == 'space_x' and field.is_input:
+            if unit == 'space_x' and field['is_input']:
                 try:
                     mod_width = int(amount) if amount else 0
                 except (ValueError, TypeError):
                     print(f"Warning: Module ID {mod_id} has invalid width value ('{amount}'). Width set to 0.")
                     mod_width = 0
                 continue # Don't add space_x to standard inputs dict
-            elif unit == 'space_y' and field.is_input:
+            elif unit == 'space_y' and field['is_input']:
                 try:
                     mod_height = int(amount) if amount else 0
                 except (ValueError, TypeError):
@@ -89,9 +92,9 @@ def _solve_module_list(modules: list[Module], specs: list[dict], weights: dict, 
                     mod_height = 0
                 continue # Don't add space_y to standard inputs dict
 
-            if field.is_input:
+            if field['is_input']:
                 inputs[unit] = amount
-            if field.is_output:
+            if field['is_output']:
                 outputs[unit] = amount
 
         # Calculate Area
@@ -100,13 +103,13 @@ def _solve_module_list(modules: list[Module], specs: list[dict], weights: dict, 
             mod_area = mod_width * mod_height
         elif mod_width <= 0 or mod_height <= 0:
              # Add warning if area is zero due to missing/invalid dimensions
-             if any(f.unit.lower() == 'space_x' for f in mod.io_fields if f.is_input) or \
-                any(f.unit.lower() == 'space_y' for f in mod.io_fields if f.is_input):
+             if any(f['unit'].lower() == 'space_x' for f in mod['io_fields'] if f['is_input']) or \
+                any(f['unit'].lower() == 'space_y' for f in mod['io_fields'] if f['is_input']):
                  print(f"Warning: Module ID {mod_id} has zero area due to non-positive dimensions (W={mod_width}, H={mod_height}).")
 
 
         module_data[mod_id] = {
-            "name": mod.name, # Correct: Module class has 'name'
+            "name": mod['name'], # Correct: Module class has 'name'
             "inputs": inputs, # Now correctly populated
             "outputs": outputs, # Now correctly populated
             "width": mod_width,
@@ -122,7 +125,8 @@ def _solve_module_list(modules: list[Module], specs: list[dict], weights: dict, 
     minimize_area = False
     spec_total_width = None
     spec_total_height = None
-
+    specs = ast.literal_eval(specs)
+    print(specs)
     for rule in specs:
         unit = standardize_unit_name(rule.get('Unit'))
         if not unit:
@@ -445,14 +449,14 @@ def solve_module_list_with_fixed_modules(modules: list[Module], specs: list[dict
         for fixed_mod in fixed_modules:
             print(f"Processing fixed module: {fixed_mod.name} (ID: {fixed_mod.id})")
             for field in fixed_mod.io_fields:
-                unit = standardize_unit_name(field.unit)
+                unit = standardize_unit_name(field['unit'])
                 if not unit or unit in DIMENSION_RESOURCES: # Skip dimensions and invalid units
                     continue
 
                 try:
-                    amount = float(field.amount) if field.amount is not None else 0.0
+                    amount = float(field['amount']) if field['amount'] is not None else 0.0
                 except (ValueError, TypeError):
-                    print(f"Warning: Invalid amount '{field.amount}' for unit '{unit}' in fixed module ID {fixed_mod.id}. Skipping field.")
+                    print(f"Warning: Invalid amount '{field['amount']}' for unit '{unit}' in fixed module ID {fixed_mod.id}. Skipping field.")
                     continue
 
                 # Calculate net contribution: output is positive, input is negative
@@ -464,7 +468,7 @@ def solve_module_list_with_fixed_modules(modules: list[Module], specs: list[dict
 
                 # Update the initial resources dictionary
                 initial_resources_from_fixed[unit] = initial_resources_from_fixed.get(unit, 0) + net_contribution
-                # print(f"  - Unit: {unit}, Amount: {field.amount}, IsInput: {field.is_input}, IsOutput: {field.is_output}, Net: {net_contribution}, Cumulative: {initial_resources_from_fixed[unit]}")
+                # print(f"  - Unit: {unit}, Amount: {field['amount']}, IsInput: {field.is_input}, IsOutput: {field.is_output}, Net: {net_contribution}, Cumulative: {initial_resources_from_fixed[unit]}")
 
 
         print(f"Calculated Initial Resources from Fixed Modules: {initial_resources_from_fixed}")

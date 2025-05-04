@@ -23,7 +23,7 @@ import 'reactflow/dist/style.css'; // Essential React Flow styles
 import {
   Box, TextField, Typography, Button, Paper, MenuItem, Select, FormControl, InputLabel,
   List, ListItem, ListItemText, Divider, LinearProgress, Tooltip, IconButton,
-  ListSubheader, SelectChangeEvent // Added missing MUI types
+  ListSubheader, SelectChangeEvent, CircularProgress // Added missing MUI types
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -165,13 +165,15 @@ interface ConstraintsPanelProps {
   resultModules: PositionedModule[]; // Needed to calculate current values
   onAddConstraint: (constraint: Omit<ActiveConstraint, 'id' | 'type'>) => void; // Type is derived internally
   onRemoveConstraint: (id: string) => void;
+  onDesign: () => void; // Optional: Callback to trigger design action
 }
 
 const ConstraintsPanel: React.FC<ConstraintsPanelProps> = ({
   activeConstraints,
   resultModules,
   onAddConstraint,
-  onRemoveConstraint
+  onRemoveConstraint,
+  onDesign
 }) => {
   // State for the 'Add Constraint' form
   const [selectedResource, setSelectedResource] = useState<Resource | ''>('');
@@ -455,19 +457,21 @@ const ConstraintsPanel: React.FC<ConstraintsPanelProps> = ({
               </List>
           </Box>
 
-           {/* --- Optional: Static Overall Production Summary --- */}
-           {/* You might want to remove this if covered by constraints */}
-          {/* <Divider sx={{ mt: 'auto', mb: 1, borderColor: 'rgba(255, 255, 255, 0.1)' }} />
-           <Typography variant="caption" gutterBottom sx={{ color: 'rgba(255,255,255,0.7)', fontWeight: 'medium', mb: 0.5 }}>
-              Overall Production
-          </Typography>
-           <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="caption" sx={{ color: 'white' }}>Processing:</Typography>
-              <Typography variant="caption" sx={{ color: '#ff9800', fontWeight:'bold' }}>
-                  {calculateCurrentValue('processing', resultModules).toLocaleString()}
-               </Typography>
-           </Box> */}
-           {/* Add others like Network, Storage etc. */}
+          <Divider sx={{ my: 2, borderColor: 'rgba(255, 255, 255, 0.2)' }} />
+          
+          <Button 
+              size="large" 
+              variant="contained" 
+              onClick={onDesign} 
+              sx={{ 
+                  mt: 'auto', // Push to bottom
+                  backgroundColor: '#9c27b0',
+                  '&:hover': { backgroundColor: '#7b1fa2' },
+                  fontWeight: 'bold'
+              }}
+          >
+              Design DataCenter
+          </Button>
 
       </Paper>
   );
@@ -492,6 +496,8 @@ const MainPage = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState<ModuleNodeData | BoundaryNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const reactFlowInstance = useReactFlow<ModuleNodeData | BoundaryNodeData, Edge>();
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
 
   // Calculate grid dimensions
   // Calculate grid dimensions IN PIXELS
@@ -623,82 +629,162 @@ const MainPage = () => {
         console.log("Removed Constraint ID:", idToRemove);
     }, []); // Stable function identity
     
+    const createNodesFromModules = useCallback((modules: PositionedModule[]): Node<ModuleNodeData>[] => {
+      // Placeholder implementation to be enhanced later
+      return modules.map((mod, index) => {
+        const widthPx = mod.width; 
+        const heightPx = mod.height;
+        const initialPosX = (mod.gridColumn - 1) * CELL_SIZE;
+        const initialPosY = (mod.gridRow - 1) * CELL_SIZE;
+    
+        return {
+          id: mod.id.toString(), // Use the module ID as the node ID
+          type: 'moduleNode',
+          position: { x: initialPosX, y: initialPosY },
+          data: { module: mod, widthPx, heightPx },
+          draggable: true,
+          zIndex: 1
+        };
+      });
+    }, [CELL_SIZE]);
+
     // Handler for the "Design" Button
     const handleDesign = useCallback(() => {
       console.log("Handling Design button click...");
-      // *** Prepare payload for the backend solver ***
-      // This needs to align EXACTLY with what your backend expects.
-      const solvePayload = {
-          // Send the dynamic constraints array
-          constraints: activeConstraints.map(c => ({
-              resource: c.resource, // e.g., 'price', 'processing'
-              unit: RESOURCE_UNIT_MAP[c.resource], // Send the unit string backend understands
-              operation: c.operation, // 'Minimize', 'Maximize', 'Below Value', 'Above Value'
-              value: c.value,         // The threshold or weight
-              type: c.type,           // 'INPUT' or 'OUTPUT' (optional, backend might infer)
-          })),
-          // Send grid dimensions in CELLS
-          grid_dimensions: {
-              cols: parseInt(gridInputCells.x) || DEFAULT_GRID_DIMENSIONS.cols,
-              rows: parseInt(gridInputCells.y) || DEFAULT_GRID_DIMENSIONS.rows,
-          },
-          // You might also need to send available module types, base costs etc.
-          // available_modules: [...]
-      };
-      console.log("Sending to /solve:", JSON.stringify(solvePayload, null, 2)); // Pretty print payload
+      
+      // Convert active constraints to backend format
+      const specs = activeConstraints.map(c => {
+        let specRule = {};
+        
+        switch (c.operation) {
+          case 'Minimize':
+            specRule = { Minimize: parseFloat(c.value) };
+            break;
+          case 'Maximize':
+            specRule = { Maximize: parseFloat(c.value) };
+            break;
+          case 'Below Value':
+            specRule = { Below_Amount: parseFloat(c.value) };
+            break;
+          case 'Above Value':
+            specRule = { Above_Amount: parseFloat(c.value) };
+            break;
+          default:
+            specRule = { Unconstrained: 0 };
+        }
+        
+        return {
+          ...specRule,
+          Unit: RESOURCE_UNIT_MAP[c.resource] || c.resource
+        };
+      });
 
-      // ** Replace with your actual backend endpoint **
-      fetch("http://localhost:8000/solve", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(solvePayload)
+
+      // Add spatial constraints from the max values
+      const maxSpaceX = parseFloat(constraints.maxSpaceX);
+      const maxSpaceY = parseFloat(constraints.maxSpaceY);
+      const maxPrice = parseFloat(constraints.maxPrice);
+      
+      // Only add constraints if values are valid numbers
+      if (!isNaN(maxSpaceX) && maxSpaceX > 0) {
+        specs.push({
+          Below_Amount: maxSpaceX,
+          Unit: 'Space_X'
+        });
+      }
+      
+      if (!isNaN(maxSpaceY) && maxSpaceY > 0) {
+        specs.push({
+          Below_Amount: maxSpaceY,
+          Unit: 'Space_Y'
+        });
+      }
+      
+      if (!isNaN(maxPrice) && maxPrice > 0) {
+        specs.push({
+          Below_Amount: maxPrice,
+          Unit: 'Price'
+        });
+      }
+    
+      // Create weights object from active constraints
+      const weights = {};
+      activeConstraints.forEach(c => {
+        if (c.operation === 'Minimize' || c.operation === 'Maximize') {
+          const unit = RESOURCE_UNIT_MAP[c.resource] || c.resource;
+          weights[unit] = c.operation === 'Minimize' ? -parseFloat(c.value) : parseFloat(c.value);
+        }
+      });
+    
+      // Get any fixed modules
+      const fixedModules = nodes
+        .filter(n => n.type === 'moduleNode' && n.data?.isFixed)
+        .map(n => ({
+          id: n.data.module.id,
+          name: n.data.module.name,
+          gridColumn: n.data.module.gridColumn,
+          gridRow: n.data.module.gridRow,
+          width: n.data.module.width,
+          height: n.data.module.height,
+          io_fields: n.data.module.io_fields || []
+        }));
+      
+      setIsLoading(true);
+      
+      // Build query string for specs and weights
+      const queryParams = new URLSearchParams();
+      queryParams.append('specs', JSON.stringify(specs));
+      queryParams.append('weights', JSON.stringify(weights));
+      
+      // Make the API request - specs and weights as query params, fixed_modules as body
+      fetch(`http://localhost:8000/solve-components?${queryParams.toString()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fixedModules) // Send only the fixed modules list in the body
       })
       .then(res => {
-          if (!res.ok) {
-              // Try to get error message from backend response body
-              return res.text().then(text => { throw new Error(`Solve request failed: ${res.status} - ${text || 'No error details'}`) });
-          }
-          return res.json();
-      })
-      .then((data: { modules?: PositionedModule[] }) => { // Expect backend to return PositionedModule array
-          const modules = data?.modules || [];
-          console.log(`Received ${modules.length} modules from solver.`);
-
-          // Process received modules: Ensure they have unique instance IDs
-          const processedModules: PositionedModule[] = modules
-              .filter(m => m != null && m.id != null && m.gridColumn != null && m.gridRow != null && m.width != null && m.height != null)
-              .map((m, index) => ({
-                  ...m,
-                  // Generate a unique instance ID for each module placement from the design result
-                  instanceId: generateUniqueId(`design_${m.id}_${index}`),
-                  // Ensure coordinate properties are numbers (backend might send strings)
-                  gridColumn: Number(m.gridColumn),
-                  gridRow: Number(m.gridRow),
-                  width: Number(m.width),
-                  height: Number(m.height),
-                  io_fields: m.io_fields ?? [], // Ensure io_fields exists
-              }));
-
-          // Validate modules against grid boundaries (optional, backend should ideally handle this)
-          const gridCols = parseInt(gridInputCells.x) || 0;
-          const gridRows = parseInt(gridInputCells.y) || 0;
-          const validModules = processedModules.filter(mod => {
-              const gCol = mod.gridColumn; const gRow = mod.gridRow;
-              const w = mod.width; const h = mod.height;
-              const fits = gCol >= 1 && gRow >= 1 && (gCol + w - 1) <= gridCols && (gRow + h - 1) <= gridRows;
-              if (!fits) console.warn(`Solver returned module outside grid bounds: ${mod.instanceId} at (${gCol},${gRow}) size (${w},${h})`);
-              return fits;
+        if (!res.ok) {
+          return res.text().then(text => {
+            throw new Error(`Error ${res.status}: ${text}`);
           });
-
-          setResultModules(validModules); // Update the canonical state
-          setActiveConstraints([]); // Optionally clear constraints after a design run? Or keep them? Decide based on workflow.
-          console.log("Updated resultModules state with valid modules:", validModules.length);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data && data.modules) {
+          // Process the returned modules
+          const processedModules: PositionedModule[] = data.modules
+            .map((m: any, index: number) => ({
+              id: m.id,
+              name: m.name,
+              instanceId: generateUniqueId(`design_${m.id}_${index}`),
+              gridColumn: Number(m.gridColumn || 1),
+              gridRow: Number(m.gridRow || 1),
+              width: Number(m.width || 1),
+              height: Number(m.height || 1),
+              io_fields: m.io_fields || []
+            }));
+            
+          setResultModules(processedModules);
+          
+          // Create React Flow nodes from the modules
+          const newNodes = createNodesFromModules(processedModules);
+          setNodes(newNodes);
+        } else {
+          console.error("Invalid response from solver:", data);
+          alert("The solver returned an invalid response. Check the console for details.");
+        }
       })
       .catch(err => {
-          console.error("Design request or processing failed:", err);
-          // TODO: Show user feedback (e.g., snackbar notification)
+        console.error("Error in design process:", err);
+        alert(`Design process failed: ${err.message}`);
+      })
+      .finally(() => {
+        setIsLoading(false);
       });
-    }, [activeConstraints, gridInputCells.x, gridInputCells.y]); // Dependencies for the handler
+    
+    }, [activeConstraints, nodes, RESOURCE_UNIT_MAP, createNodesFromModules, generateUniqueId]);
+
 
   const handleDCSelect = (dcId: number | "") => {
     console.log(`Handling DC Select change: ${dcId}`);
@@ -858,7 +944,6 @@ const MainPage = () => {
          <TextField size="small" label="Max Price" value={constraints.maxPrice} onChange={(e) => handleChange('maxPrice', e.target.value)} type="text" inputMode='numeric' variant="outlined" InputLabelProps={{ sx: { color: 'rgba(255, 255, 255, 0.7)' } }} InputProps={{ sx: { color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' } } }} sx={{ mb: { xs: 1, md: 0 }, width: 120 }} />
          <TextField size="small" label="Max X (Cells)" value={constraints.maxSpaceX} onChange={(e) => handleChange('maxSpaceX', e.target.value)} type="text" inputMode='numeric' variant="outlined" InputLabelProps={{ sx: { color: 'rgba(255, 255, 255, 0.7)' } }} InputProps={{ sx: { color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' } } }} sx={{ mb: { xs: 1, md: 0 }, width: 120 }} />
          <TextField size="small" label="Max Y (Cells)" value={constraints.maxSpaceY} onChange={(e) => handleChange('maxSpaceY', e.target.value)} type="text" inputMode='numeric' variant="outlined" InputLabelProps={{ sx: { color: 'rgba(255, 255, 255, 0.7)' } }} InputProps={{ sx: { color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' } } }} sx={{ mb: { xs: 1, md: 0 }, width: 120 }} />
-         <Button size="medium" variant="contained" onClick={handleDesign} sx={{ height: '40px', mb: { xs: 1, md: 0 } }}>Design</Button>
       </Box>
 
       {/* React Flow Area Container */}
@@ -894,6 +979,7 @@ const MainPage = () => {
             resultModules={resultModules}
             onAddConstraint={handleAddConstraint}
             onRemoveConstraint={handleRemoveConstraint}
+            onDesign={handleDesign}
         />
 
     <Box sx={{
@@ -911,6 +997,21 @@ const MainPage = () => {
       <Typography variant="caption">Constraints: {activeConstraints.length}</Typography>
     </Box>
       </Box>
+      {/* {isLoading && (
+    <Box sx={{ 
+      position: 'absolute', 
+      top: 0, left: 0, right: 0, bottom: 0, 
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', 
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      zIndex: 999
+    }}>
+      <CircularProgress size={60} sx={{ color: '#9065f0', mb: 2 }} />
+      <Typography variant="h6" sx={{ color: 'white' }}>
+        Designing Data Center...
+      </Typography>
+    </Box> */}
+
     </Box>
   );
 };
