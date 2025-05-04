@@ -532,6 +532,8 @@ const MainPage = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const reactFlowInstance = useReactFlow<ModuleNodeData | BoundaryNodeData, Edge>();
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
 
 
   // Calculate grid dimensions
@@ -716,17 +718,17 @@ const MainPage = () => {
         .map(node => ({
           id: node.data.module.id,
           name: node.data.module.name,
-          width: node.data.module.width,
-          height: node.data.module.height,
+          width: node.data.module.width*CELL_SIZE,
+          height: node.data.module.height*CELL_SIZE,
           gridColumn: node.data.module.gridColumn*CELL_SIZE,
           gridRow: node.data.module.gridRow*CELL_SIZE,
           io_fields: node.data.module.io_fields || []
         }));
     
-      if (currentModules.length === 0) {
-        alert("No modules to refine. Place some modules first.");
-        return;
-      }
+      // if (currentModules.length === 0) {
+      //   alert("No modules to refine. Place some modules first.");
+      //   return;
+      // }
     
       // Build the data object for the backend
       const placementData = {
@@ -1012,6 +1014,88 @@ const MainPage = () => {
     
     }, [activeConstraints, nodes, RESOURCE_UNIT_MAP, createNodesFromModules, generateUniqueId]);
 
+    const handleSaveDatacenter = useCallback(() => {
+      // Prepare the datacenter object to save
+      const datacenterToSave = {
+        name: saveName,
+        specs: [
+          { Unit: 'Space_X', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols },
+          { Unit: 'Space_Y', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows }
+        ],
+        modules: resultModules.map(mod => ({
+          ...mod,
+          id: mod.id.toString().replace(/^dc_\d+_(\d+)_\d+$/, '$1') // Extract original ID if it's a loaded DC module
+        }))
+      };
+      
+      if (constraints.maxPrice) {
+        datacenterToSave.specs.push({
+          Unit: 'Price', Below_Amount: 1, Above_Amount: 0, Minimize: 0, Maximize: 0, Unconstrained: 0, Amount: parseFloat(constraints.maxPrice)
+        });
+      }
+    
+      // Add any specs from active constraints
+      activeConstraints.forEach(constraint => {
+        const unit = RESOURCE_UNIT_MAP[constraint.resource];
+        const spec = {
+          Unit: unit,
+          Below_Amount: constraint.operation === 'Below Value' ? 1 : 0,
+          Above_Amount: constraint.operation === 'Above Value' ? 1 : 0,
+          Minimize: constraint.operation === 'Minimize' ? 1 : 0,
+          Maximize: constraint.operation === 'Maximize' ? 1 : 0,
+          Unconstrained: 0,
+          Amount: parseFloat(constraint.value)
+        };
+        datacenterToSave.specs.push(spec);
+      });
+      
+      // Determine if we're updating or creating
+      const method = selectedDC !== "" ? "PUT" : "POST";
+      const url = selectedDC !== "" 
+        ? `http://localhost:8000/datacenters/${selectedDC}` 
+        : "http://localhost:8000/datacenters";
+      
+      setIsLoading(true);
+      
+      fetch(url, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(datacenterToSave)
+      })
+      .then(res => {
+        if (!res.ok) {
+          return res.text().then(text => {
+            throw new Error(`Error ${res.status}: ${text}`);
+          });
+        }
+        return res.json();
+      })
+      .then((data) => {
+        alert(`Datacenter "${saveName}" ${selectedDC !== "" ? 'updated' : 'saved'} successfully!`);
+        // Refresh datacenters list and select the newly saved one
+        fetch("http://localhost:8000/datacenters")
+          .then(res => res.json())
+          .then((datacenters: DataCenter[]) => {
+            setDatacenters(datacenters);
+            if (selectedDC === "") {
+              // If new datacenter, find and select it
+              const newDC = datacenters.find(dc => dc.name === saveName);
+              if (newDC) setSelectedDC(newDC.id);
+            }
+          });
+      })
+      .catch(err => {
+        console.error("Error saving datacenter:", err);
+        alert(`Failed to save datacenter: ${err.message}`);
+      })
+      .finally(() => {
+        setIsLoading(false);
+        setSaveDialogOpen(false);
+      });
+    }, [saveName, constraints, resultModules, selectedDC, activeConstraints, RESOURCE_UNIT_MAP]);
+    
+    // In the header section of the return statement, add the Save button
+    // Right after the existing TextField components:
 
   const handleDCSelect = (dcId: number | "") => {
     console.log(`Handling DC Select change: ${dcId}`);
@@ -1171,6 +1255,58 @@ const MainPage = () => {
          <TextField size="small" label="Max Price" value={constraints.maxPrice} onChange={(e) => handleChange('maxPrice', e.target.value)} type="text" inputMode='numeric' variant="outlined" InputLabelProps={{ sx: { color: 'rgba(255, 255, 255, 0.7)' } }} InputProps={{ sx: { color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' } } }} sx={{ mb: { xs: 1, md: 0 }, width: 120 }} />
          <TextField size="small" label="Max X (Cells)" value={constraints.maxSpaceX} onChange={(e) => handleChange('maxSpaceX', e.target.value)} type="text" inputMode='numeric' variant="outlined" InputLabelProps={{ sx: { color: 'rgba(255, 255, 255, 0.7)' } }} InputProps={{ sx: { color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' } } }} sx={{ mb: { xs: 1, md: 0 }, width: 120 }} />
          <TextField size="small" label="Max Y (Cells)" value={constraints.maxSpaceY} onChange={(e) => handleChange('maxSpaceY', e.target.value)} type="text" inputMode='numeric' variant="outlined" InputLabelProps={{ sx: { color: 'rgba(255, 255, 255, 0.7)' } }} InputProps={{ sx: { color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.6)' }, '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9065f0' } } }} sx={{ mb: { xs: 1, md: 0 }, width: 120 }} />
+
+          {/* Add Save DataCenter button */}
+          <Button
+            variant="outlined"
+            startIcon={<SaveIcon />}
+            onClick={() => {
+              setSaveName(selectedDC !== "" ? 
+                datacenters.find(dc => dc.id === selectedDC)?.name || "" : 
+                "");
+              setSaveDialogOpen(true);
+            }}
+            sx={{ 
+              color: 'white', 
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+              '&:hover': { borderColor: '#9065f0' },
+              height: 40
+            }}
+          >
+            Save DataCenter
+          </Button>
+          {/* Add the dialog at the end of the component, right before the closing Box tag */}
+          <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)}>
+            <DialogTitle>Save DataCenter Configuration</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                {selectedDC !== "" ? 
+                  "Update the existing datacenter or enter a new name to save as a copy:" : 
+                  "Enter a name for your datacenter configuration:"}
+              </DialogContentText>
+              <TextField
+                autoFocus
+                margin="dense"
+                id="name"
+                label="DataCenter Name"
+                type="text"
+                fullWidth
+                variant="outlined"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={handleSaveDatacenter} 
+                disabled={!saveName.trim()}
+                variant="contained"
+              >
+                {selectedDC !== "" ? "Update" : "Save"}
+              </Button>
+            </DialogActions>
+          </Dialog>
       </Box>
 
       {/* React Flow Area Container */}
