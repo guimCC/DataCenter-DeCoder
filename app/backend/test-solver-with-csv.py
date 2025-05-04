@@ -1,7 +1,7 @@
 import csv
 import os
 from collections import defaultdict
-from app.backend.solver_utils_list import solve_module_list
+from solver_utils_list import solve_module_list
 from models import Module, IOField # Changed import source
 
 # --- Define file paths relative to this script ---

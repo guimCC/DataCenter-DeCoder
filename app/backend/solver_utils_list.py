@@ -18,7 +18,8 @@ def standardize_unit_name(name):
         return None
     return str(name).strip().lower().replace(' ', '_')
 
-def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -> tuple[dict, dict]:
+
+def solve_module_list(modules: list[Module], specs: list[dict], weights: dict, initial_resources: dict = None) -> tuple[dict, dict]:
     """
     Solves the resource optimization problem to select the best module counts.
 
@@ -29,16 +30,29 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
                              'Minimize', 'Maximize', 'Amount', 'Unconstrained'.
         weights (dict): Dictionary specifying the relative importance for objective terms.
                         Example: {'data_storage': 2.0, 'total_area': 1.0}
+        initial_resources (dict, optional): A dictionary representing the initial state of resources
+                                            before adding any modules. Defaults to None (treated as empty).
+                                            Example: {'data_storage': 100, 'price': -50}
 
     Returns:
         tuple[dict, dict]: A tuple containing:
             - selected_modules_counts (dict): {module_id: count}
-            - net_resources (dict): {resource_unit: net_value} for all involved resources.
+            - net_resources (dict): {resource_unit: net_value} for all involved resources,
+                                    including the initial state.
             Returns ({}, {}) if optimization fails or is infeasible.
     """
     start_time = time.time()
     print(f"--- Starting Module List Optimization ---")
     print(f"Received {len(modules)} module types, {len(specs)} spec rules.")
+
+    # Initialize initial_resources if None
+    if initial_resources is None:
+        initial_resources = {}
+    else:
+        # Standardize keys in initial_resources
+        initial_resources = {standardize_unit_name(k): v for k, v in initial_resources.items() if standardize_unit_name(k)}
+        print(f"Using Initial Resources: {initial_resources}")
+
 
     # --- 1. Process Modules ---
     module_data = {}
@@ -202,12 +216,15 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
             weight = base_sign * relative_weight
 
         if weight != 0:
+            # Calculate net contribution from modules for this unit
             unit_net_contrib_expr = pulp.lpSum(
                 float(module_data[mod_id]['outputs'].get(unit, 0) - module_data[mod_id]['inputs'].get(unit, 0))
                 * module_counts[mod_id]
                 for mod_id in module_ids if mod_id in module_counts
             )
-            objective_expr += weight * unit_net_contrib_expr
+            # Add the initial resource value for this unit to the objective expression
+            initial_value = float(initial_resources.get(unit, 0))
+            objective_expr += weight * (unit_net_contrib_expr + initial_value) # Add initial value here
             objective_terms_added += 1
             term_desc = f"{unit} (W={weight:.2f})"
             if weight > 0: maximized_units.append(term_desc)
@@ -264,6 +281,7 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
 
         # --- Convert limit to float only now that we know it's needed and valid ---
         limit_float = float(limit)
+        initial_value = float(initial_resources.get(unit, 0)) # Get initial value for the unit
 
         # --- Define expressions (consider moving this down if computationally heavy) ---
         input_expr = pulp.lpSum(
@@ -274,42 +292,45 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
             float(module_data[mod_id]['outputs'].get(unit, 0)) * module_counts[mod_id]
             for mod_id in module_ids if mod_id in module_counts
         )
+        # Net expression including initial value
+        net_expr_with_initial = output_expr - input_expr + initial_value
 
         constraint_added_for_unit = False
         constraint_str = ""
-        # --- Apply constraints using limit_float ---
+        # --- Apply constraints using limit_float and initial_value ---
         if unit in INPUT_RESOURCES:
             if is_below:
-                prob += input_expr <= limit_float, f"InputLimit_Below_{unit}"
-                constraint_str = f"INPUT (Below): {unit} <= {limit_float}"
-                constraint_added_for_unit = True
-            elif is_above: # 'elif' is fine since is_below and is_above shouldn't both be true for the same rule
-                prob += input_expr >= limit_float, f"InputLimit_Above_{unit}"
-                constraint_str = f"INPUT (Above): {unit} >= {limit_float}"
-                constraint_added_for_unit = True
-        elif unit in OUTPUT_RESOURCES:
-            if is_below:
-                prob += output_expr <= limit_float, f"OutputReq_Below_{unit}"
-                constraint_str = f"OUTPUT (Below): {unit} <= {limit_float}"
+                prob += input_expr + initial_value <= limit_float, f"InputLimit_Below_{unit}"
+                constraint_str = f"INPUT (Below): {unit} + {initial_value} <= {limit_float}"
                 constraint_added_for_unit = True
             elif is_above:
-                prob += output_expr >= limit_float, f"OutputReq_Above_{unit}"
-                constraint_str = f"OUTPUT (Above): {unit} >= {limit_float}"
+                prob += input_expr + initial_value >= limit_float, f"InputLimit_Above_{unit}"
+                constraint_str = f"INPUT (Above): {unit} + {initial_value} >= {limit_float}"
+                constraint_added_for_unit = True
+        elif unit in OUTPUT_RESOURCES:
+            # Output constraints apply to the total output (module outputs + initial)
+            if is_below:
+                prob += output_expr + initial_value <= limit_float, f"OutputReq_Below_{unit}"
+                constraint_str = f"OUTPUT (Below): {unit} + {initial_value} <= {limit_float}"
+                constraint_added_for_unit = True
+            elif is_above:
+                prob += output_expr + initial_value >= limit_float, f"OutputReq_Above_{unit}"
+                constraint_str = f"OUTPUT (Above): {unit} + {initial_value} >= {limit_float}"
                 constraint_added_for_unit = True
         elif unit in INTERNAL_RESOURCES:
              # Below/Above constraints are currently ignored for internal resources
+             # If needed later, they would likely apply to the net value: net_expr_with_initial
              print(f"Warning: Ignoring Below/Above constraint for internal resource '{unit}'.")
         else: # Unknown resource type
-            print(f"Warning: Applying spec constraint to unknown resource type '{unit}'.")
+            # Apply constraints to the net value for unknown types
+            print(f"Warning: Applying spec constraint to unknown resource type '{unit}' (using net value).")
             if is_below:
-                # Assume below applies to input-like aspect for unknown
-                prob += input_expr <= limit_float, f"UnknownLimit_Below_{unit}"
-                constraint_str = f"UNKNOWN (Below): {unit} <= {limit_float}"
+                prob += net_expr_with_initial <= limit_float, f"UnknownLimit_Below_{unit}"
+                constraint_str = f"UNKNOWN (Below): Net {unit} + {initial_value} <= {limit_float}"
                 constraint_added_for_unit = True
             elif is_above:
-                 # Assume above applies to output-like aspect for unknown
-                prob += output_expr >= limit_float, f"UnknownReq_Above_{unit}"
-                constraint_str = f"UNKNOWN (Above): {unit} >= {limit_float}"
+                prob += net_expr_with_initial >= limit_float, f"UnknownReq_Above_{unit}"
+                constraint_str = f"UNKNOWN (Above): Net {unit} + {initial_value} >= {limit_float}"
                 constraint_added_for_unit = True
 
         if constraint_added_for_unit:
@@ -324,14 +345,17 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
 
     internal_constraints_added = 0
     for unit in INTERNAL_RESOURCES:
-        if unit in all_defined_units:
+        # Check if the unit is involved in modules OR initial resources
+        if unit in all_defined_units or unit in initial_resources:
+            initial_value = float(initial_resources.get(unit, 0))
             net_expr = pulp.lpSum(
                 float(module_data[mod_id]['outputs'].get(unit, 0) - module_data[mod_id]['inputs'].get(unit, 0))
                 * module_counts[mod_id]
                 for mod_id in module_ids if mod_id in module_counts
             )
-            prob += net_expr >= 0, f"InternalNet_{unit}"
-            print(f"Constraint Added: INTERNAL Net {unit} >= 0")
+            # Add initial value to the net expression for the constraint
+            prob += net_expr + initial_value >= 0, f"InternalNet_{unit}"
+            print(f"Constraint Added: INTERNAL Net {unit} + {initial_value} >= 0")
             internal_constraints_added += 1
 
     # --- 7. Solve the Problem ---
@@ -346,11 +370,12 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
     selected_modules_counts = {}
     net_resources = {}
 
-    if prob.status == pulp.LpStatusOptimal or prob.status == pulp.LpStatusFeasible:
+    if prob.status == pulp.LpStatusOptimal: # Corrected status check
         total_inputs = {}
         total_outputs = {}
         all_units_in_solution = set()
 
+        # Calculate totals from selected modules
         for mod_id in module_ids:
             if mod_id in module_counts:
                 count_val = module_counts[mod_id].varValue
@@ -365,20 +390,24 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
                         total_outputs[unit] = total_outputs.get(unit, 0) + amount * count
                         all_units_in_solution.add(unit)
 
-        # Calculate Net Resources for all involved units (including internal)
-        # Also include units mentioned in specs, even if not produced/consumed
+        # Calculate Net Resources for all involved units (including internal and initial)
         spec_units = {rule['Unit'] for rule in valid_specs if rule['Unit']}
-        relevant_units = sorted(list(all_units_in_solution | spec_units | set(INTERNAL_RESOURCES)))
+        initial_units = set(initial_resources.keys())
+        relevant_units = sorted(list(all_units_in_solution | spec_units | set(INTERNAL_RESOURCES) | initial_units))
 
         for unit in relevant_units:
             if unit in DIMENSION_RESOURCES: continue # Exclude dimensions from net resource dict
             inp = total_inputs.get(unit, 0)
             outp = total_outputs.get(unit, 0)
-            net = outp - inp
-            net_resources[unit] = net # Store only the net value
+            initial_val = initial_resources.get(unit, 0)
+            # Final net is (output from modules + initial output) - (input from modules + initial input)
+            # Assuming initial_resources represents the net starting value:
+            net = (outp - inp) + initial_val
+            net_resources[unit] = net # Store the final net value including initial state
 
         print(f"Selected Modules: {selected_modules_counts}")
-        print(f"Net Resources: {net_resources}")
+        print(f"Initial Resources: {initial_resources}")
+        print(f"Final Net Resources (incl. initial): {net_resources}")
 
     else:
         print("Optimization did not find an optimal or feasible solution.")
@@ -386,3 +415,58 @@ def solve_module_list(modules: list[Module], specs: list[dict], weights: dict) -
         return {}, {}
 
     return selected_modules_counts, net_resources
+
+
+def solve_module_list_with_fixed_modules(modules: list[Module], specs: list[dict], weights: dict, fixed_modules: list[Module]) -> tuple[dict, dict]:
+    """
+    Calculates initial resources based on a list of fixed modules and then solves
+    the optimization problem for the remaining selectable modules.
+
+    Args:
+        modules (list[Module]): List of available Module objects to select from.
+        specs (list[dict]): List of constraints and objectives.
+        weights (dict): Dictionary of objective weights.
+        fixed_modules (list[Module]): List of Module objects that are pre-selected
+                                      and contribute to the initial resource state.
+
+    Returns:
+        tuple[dict, dict]: Result from solve_module_list:
+            - selected_modules_counts (dict): {module_id: count} for the non-fixed modules.
+            - net_resources (dict): {resource_unit: net_value} for all resources,
+                                    including contributions from fixed modules.
+    """
+    print(f"--- Calculating Initial Resources from {len(fixed_modules)} Fixed Modules ---")
+    initial_resources_from_fixed = {}
+
+    if not fixed_modules:
+        print("No fixed modules provided. Proceeding without initial resources from fixed set.")
+    else:
+        for fixed_mod in fixed_modules:
+            print(f"Processing fixed module: {fixed_mod.name} (ID: {fixed_mod.id})")
+            for field in fixed_mod.io_fields:
+                unit = standardize_unit_name(field.unit)
+                if not unit or unit in DIMENSION_RESOURCES: # Skip dimensions and invalid units
+                    continue
+
+                try:
+                    amount = float(field.amount) if field.amount is not None else 0.0
+                except (ValueError, TypeError):
+                    print(f"Warning: Invalid amount '{field.amount}' for unit '{unit}' in fixed module ID {fixed_mod.id}. Skipping field.")
+                    continue
+
+                # Calculate net contribution: output is positive, input is negative
+                net_contribution = 0
+                if field.is_output:
+                    net_contribution = amount
+                elif field.is_input:
+                    net_contribution = -amount
+
+                # Update the initial resources dictionary
+                initial_resources_from_fixed[unit] = initial_resources_from_fixed.get(unit, 0) + net_contribution
+                # print(f"  - Unit: {unit}, Amount: {field.amount}, IsInput: {field.is_input}, IsOutput: {field.is_output}, Net: {net_contribution}, Cumulative: {initial_resources_from_fixed[unit]}")
+
+
+        print(f"Calculated Initial Resources from Fixed Modules: {initial_resources_from_fixed}")
+
+    # Call the main solver function with the calculated initial resources
+    return solve_module_list(modules, specs, weights, initial_resources=initial_resources_from_fixed)
