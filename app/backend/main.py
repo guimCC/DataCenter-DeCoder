@@ -93,7 +93,7 @@ async def solve_dummy():
     return {"modules": positioned}    
 
 
-# POST: solve problem and get list, with given fixed modules
+# POST: solve problem and get list, with given fixed modules (if not provided, the fixed_modules are [] )
 @app.post('/solve-components')
 async def solve_components_with_fixed_modules(specs, weights, fixed_modules: list[Module] = [] ):
     modules = get_modules()
@@ -120,6 +120,7 @@ def update_module(module_id: int, updated: Module):
     db = get_database()
     db.modules.update_one({"id": module_id}, {"$set": updated.dict()})
     return {"message": "Updated"}
+
 
 ######################### DATACENTER #########################
 # GET: return all datacenters
