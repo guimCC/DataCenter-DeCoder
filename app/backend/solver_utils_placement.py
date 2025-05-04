@@ -1,8 +1,10 @@
 from models import Module
 import time
-import numpy as np # Added for placement grid
-
-from app.backend.solver_utils_list import standardize_unit_name  # ! may break things
+import numpy as np
+import math
+from collections import defaultdict
+import random
+from solver_utils_list import standardize_unit_name
 
 # --- Constants ---
 INPUT_RESOURCES = ['price', 'grid_connection', 'water_connection']
@@ -13,35 +15,49 @@ DIMENSION_RESOURCES = ['space_x', 'space_y']
 
 def solve_module_placement(modules: list[Module], specs: list[dict], weights: dict, selected_modules_counts: dict) -> dict:
     """
-    Implements the module placement algorithm based on the GreedyModulePlacement class.
+    Places modules in a datacenter grid using a clustered approach.
     
     Args:
-        modules (list[Module]): List of available Module objects.
-        specs (list[dict]): A list of dictionaries defining the constraints and objectives.
-        weights (dict): Dictionary specifying the relative importance for objective terms.
-        selected_modules_counts (dict): Dictionary of selected module IDs and counts from solve_module_list.
+        modules (list[Module]): List of available Module objects
+        specs (list[dict]): List of specifications for the datacenter
+        weights (dict): Dictionary with weights for objectives (not used directly for placement)
+        selected_modules_counts (dict): Dictionary with module_id -> count mapping
         
     Returns:
-        dict: A dictionary containing placement information:
-            - 'status': Status of the placement ('Success', 'Failed', etc.).
-            - 'placement': List of dictionaries with module placement details.
-            - 'grid': 2D numpy array representation of the placement.
-            - 'score': Placement score metrics.
-            
-    If placement fails, returns a dictionary with status 'Failed' and empty values.
+        dict: A dictionary containing:
+            - placed_modules (list): List of module placement data
+            - grid (list): 2D grid representation of the datacenter
+            - width (int): Width of the datacenter
+            - height (int): Height of the datacenter
+            - placement_score (float): Score representing placement quality
     """
-    if not selected_modules_counts:
-        return {
-            'status': 'Failed',
-            'message': 'No modules selected for placement',
-            'placement': [],
-            'grid': None,
-            'score': 0.0
-        }
-    
     print(f"--- Starting Module Placement ---")
+    start_time = time.time()
     
-    # --- 1. Process Modules ---
+    # Extract datacenter dimensions from specs
+    datacenter_width = None
+    datacenter_height = None
+    
+    for rule in specs:
+        unit = standardize_unit_name(rule.get('Unit'))
+        if unit == 'space_x' and rule.get('Below_Amount') == 1:
+            try:
+                datacenter_width = int(rule.get('Amount'))
+            except (ValueError, TypeError):
+                pass
+        elif unit == 'space_y' and rule.get('Below_Amount') == 1:
+            try:
+                datacenter_height = int(rule.get('Amount'))
+            except (ValueError, TypeError):
+                pass
+    
+    if not datacenter_width or not datacenter_height:
+        print("Error: Could not determine datacenter dimensions from specs")
+        return {"error": "Invalid datacenter dimensions"}
+    
+    print(f"Datacenter dimensions: {datacenter_width} x {datacenter_height}")
+    
+    # Process module data
     module_data = {}
     for mod in modules:
         mod_id = mod.id
@@ -50,7 +66,7 @@ def solve_module_placement(modules: list[Module], specs: list[dict], weights: di
         mod_width = 0
         mod_height = 0
         
-        # Process io_fields to populate inputs, outputs, width, height
+        # Process IO fields to extract needed information
         for field in mod.io_fields:
             unit = standardize_unit_name(field.unit)
             amount = field.amount
@@ -71,500 +87,372 @@ def solve_module_placement(modules: list[Module], specs: list[dict], weights: di
             if field.is_output:
                 outputs[unit] = amount
         
-        # Calculate Area
-        mod_area = 0
-        if mod_width > 0 and mod_height > 0:
-            mod_area = mod_width * mod_height
-        
         module_data[mod_id] = {
             "name": mod.name,
             "inputs": inputs,
             "outputs": outputs,
             "width": mod_width,
-            "height": mod_height,
-            "area": mod_area
+            "height": mod_height
         }
     
-    # --- 2. Extract space constraints from specs ---
-    total_width = None
-    total_height = None
-    
-    for rule in specs:
-        unit = standardize_unit_name(rule.get('Unit'))
-        if not unit:
-            continue
-        
-        # Check for space constraints (Below_Amount on space_x/y)
-        if unit == 'space_x' and rule.get('Below_Amount') == 1 and rule.get('Amount') is not None:
-            try:
-                total_width = int(rule.get('Amount'))
-            except (ValueError, TypeError):
-                print(f"Warning: Invalid space_x constraint: {rule.get('Amount')}")
-                
-        if unit == 'space_y' and rule.get('Below_Amount') == 1 and rule.get('Amount') is not None:
-            try:
-                total_height = int(rule.get('Amount'))
-            except (ValueError, TypeError):
-                print(f"Warning: Invalid space_y constraint: {rule.get('Amount')}")
-    
-    if total_width is None or total_height is None or total_width <= 0 or total_height <= 0:
-        return {
-            'status': 'Failed',
-            'message': f'Invalid space constraints: width={total_width}, height={total_height}',
-            'placement': [],
-            'grid': None,
-            'score': 0.0
-        }
-    
-    print(f"Space constraints: {total_width} x {total_height}")
-    
-    # --- 3. Create the placement grid (locked regions are not supported in this version) ---
-    initial_grid = np.zeros((total_height, total_width), dtype=int)
-    
-    # --- 4. Implement placement algorithm ---
-    class GreedyModulePlacement:
-        """Handles the greedy placement of modules on a grid."""
-        
-        def __init__(self, module_data, selected_modules_counts, total_width, total_height, locked_grid=None):
-            """Initialize placement algorithm with module data and selection."""
-            self.module_data = module_data
-            self.selected_modules = []
-            
-            # Create individual module instances based on counts
-            for mod_id, count in selected_modules_counts.items():
-                for i in range(count):
-                    if mod_id not in module_data:
-                        continue  # Skip if module doesn't exist in data
-                        
-                    mod_info = module_data[mod_id]
-                    module = {
-                        'id': mod_id,
-                        'name': mod_info['name'],
-                        'width': mod_info['width'],
-                        'height': mod_info['height'],
-                        'inputs': mod_info['inputs'].copy(),
-                        'outputs': mod_info['outputs'].copy(),
-                        'instance': i,  # Instance counter for multiple of same type
-                        'x': -1,  # To be determined by placement algorithm
-                        'y': -1   # To be determined by placement algorithm
-                    }
-                    self.selected_modules.append(module)
-            
-            self.total_width = total_width
-            self.total_height = total_height
-            self.grid = None
-            self.best_placement = None
-            self.best_score = float('-inf')
-            
-            # Initialize grid with locked regions if provided
-            if locked_grid is not None:
-                self.initial_grid = locked_grid.copy()
-            else:
-                self.initial_grid = np.zeros((self.total_height, self.total_width), dtype=int)
-            
-            print(f"Initialized placement for {len(self.selected_modules)} module instances")
-            print(f"Datacenter dimensions: {total_width} x {total_height}")
-        
-        def create_empty_grid(self):
-            """Create a grid with locked regions marked."""
-            return self.initial_grid.copy()
-        
-        def can_place_module(self, grid, module, x, y):
-            """Check if a module can be placed at the given position without overlapping."""
-            if x < 0 or y < 0 or x + module['width'] > self.total_width or y + module['height'] > self.total_height:
-                return False
-            
-            # Check if the area is empty (no modules and no locked regions)
-            area = grid[y:y+module['height'], x:x+module['width']]
-            return np.all(area == 0)  # 0 = empty, -1 = locked, >0 = module ID
-        
-        def place_module(self, grid, module, x, y):
-            """Place a module on the grid and return the updated grid."""
-            new_grid = grid.copy()
-            module_id = int(module['id'])
-            new_grid[y:y+module['height'], x:x+module['width']] = module_id
-            return new_grid
-        
-        def analyze_resource_connections(self):
-            """
-            Analyze all modules to find the resource dependencies between them.
-            Returns a connectivity matrix showing which modules should be placed near each other.
-            """
-            # Create a connectivity matrix where each cell [i,j] represents the 
-            # strength of the connection between module i and j
-            n = len(self.selected_modules)
-            connectivity = np.zeros((n, n))
-            
-            # For each resource type
-            for resource in INTERNAL_RESOURCES:
-                # Find producers and consumers
-                producers = [(i, mod, mod['outputs'].get(resource, 0)) 
-                             for i, mod in enumerate(self.selected_modules) 
-                             if resource in mod['outputs']]
-                
-                consumers = [(i, mod, mod['inputs'].get(resource, 0)) 
-                             for i, mod in enumerate(self.selected_modules) 
-                             if resource in mod['inputs']]
-                
-                # Connect producers to consumers
-                for p_idx, p_mod, p_amount in producers:
-                    for c_idx, c_mod, c_amount in consumers:
-                        if p_idx != c_idx:  # Don't connect module to itself
-                            flow = min(p_amount, c_amount)
-                            connectivity[p_idx, c_idx] += flow
-                            connectivity[c_idx, p_idx] += flow  # Make it symmetric
-            
-            return connectivity
-
-        def enhanced_greedy_placement(self):
-            """
-            Enhanced greedy placement algorithm that considers both module size and connectivity.
-            
-            Steps:
-            1. Sort modules by size (largest first)
-            2. Pre-calculate module connectivity
-            3. Place modules one by one, prioritizing placement near connected modules
-            4. Use a more efficient grid packing approach
-            """
-            print("Starting enhanced greedy placement...")
-            start_time = time.time()
-            
-            # Pre-calculate connectivity
-            connectivity = self.analyze_resource_connections()
-            
-            # Sort modules by area (largest first)
-            module_indices = list(range(len(self.selected_modules)))
-            module_indices.sort(key=lambda i: self.selected_modules[i]['width'] * 
-                                            self.selected_modules[i]['height'], 
-                                reverse=True)
-            
-            # Create empty grid and placement list
-            grid = self.create_empty_grid()
-            placement = []
-            
-            # First, place the largest module at the first available position
-            first_placed = False
-            first_idx = module_indices[0]
-            first_module = self.selected_modules[first_idx]
-            
-            # Try to find a valid placement for the first module
-            for y in range(self.total_height - first_module['height'] + 1):
-                for x in range(self.total_width - first_module['width'] + 1):
-                    if self.can_place_module(grid, first_module, x, y):
-                        grid = self.place_module(grid, first_module, x, y)
-                        
-                        first_module_placed = first_module.copy()
-                        first_module_placed['x'] = x
-                        first_module_placed['y'] = y
-                        placement.append(first_module_placed)
-                        placed_indices = {first_idx}
-                        first_placed = True
-                        break
-                if first_placed:
-                    break
-            
-            if not first_placed:
-                print("Error: Could not place the first module!")
-                return [], grid
-            
-            # Place remaining modules
-            while len(placed_indices) < len(self.selected_modules):
-                best_position = None
-                best_module_idx = None
-                best_distance = float('inf')
-                
-                # Find the next module to place based on connectivity
-                for i in module_indices:
-                    if i in placed_indices:
-                        continue
-                    
-                    candidate = self.selected_modules[i]
-                    
-                    # Calculate connectivity score to already placed modules
-                    total_connectivity = sum(connectivity[i, j] for j in placed_indices)
-                    
-                    # Increase the influence of connectivity by squaring it
-                    total_connectivity = total_connectivity ** 2
-                    
-                    # If connected, prioritize this module
-                    if total_connectivity > 0:
-                        # Find best position for this module
-                        min_dist = float('inf')
-                        best_pos = None
-                        
-                        # Try to place near connected modules
-                        for placed_idx in placed_indices:
-                            placed_mod = placement[list(placed_indices).index(placed_idx)]
-                            
-                            # Try positions around this module
-                            positions_to_try = []
-                            
-                            # Try right of the module
-                            positions_to_try.append((
-                                placed_mod['x'] + placed_mod['width'], 
-                                placed_mod['y']
-                            ))
-                            
-                            # Try below the module
-                            positions_to_try.append((
-                                placed_mod['x'], 
-                                placed_mod['y'] + placed_mod['height']
-                            ))
-                            
-                            # Try left of the module
-                            positions_to_try.append((
-                                placed_mod['x'] - candidate['width'], 
-                                placed_mod['y']
-                            ))
-                            
-                            # Try above the module
-                            positions_to_try.append((
-                                placed_mod['x'], 
-                                placed_mod['y'] - candidate['height']
-                            ))
-                            
-                            for x, y in positions_to_try:
-                                if self.can_place_module(grid, candidate, x, y):
-                                    # Calculate manhattan distance to all connected modules
-                                    total_dist = 0
-                                    candidate_center_x = x + candidate['width'] / 2
-                                    candidate_center_y = y + candidate['height'] / 2
-                                    
-                                    for other_idx in placed_indices:
-                                        other_mod = placement[list(placed_indices).index(other_idx)]
-                                        other_center_x = other_mod['x'] + other_mod['width'] / 2
-                                        other_center_y = other_mod['y'] + other_mod['height'] / 2
-                                        
-                                        manhattan_dist = (abs(candidate_center_x - other_center_x) + 
-                                                         abs(candidate_center_y - other_center_y))
-                                        
-                                        # Weight by connectivity
-                                        weighted_dist = manhattan_dist / (connectivity[i, other_idx] ** 2 + 0.1)
-                                        total_dist += weighted_dist
-                                    
-                                    if total_dist < min_dist:
-                                        min_dist = total_dist
-                                        best_pos = (x, y)
-                        
-                        if best_pos and min_dist < best_distance:
-                            best_distance = min_dist
-                            best_position = best_pos
-                            best_module_idx = i
-                
-                # If no connected module found, take the next largest module
-                if best_module_idx is None:
-                    for i in module_indices:
-                        if i not in placed_indices:
-                            best_module_idx = i
-                            break
-                    
-                    # If we found an unplaced module, find the best compact position
-                    if best_module_idx is not None:
-                        candidate = self.selected_modules[best_module_idx]
-                        
-                        # Try to place in a compact way (minimize total bounding box)
-                        min_outer_area = float('inf')
-                        
-                        # Try all possible positions
-                        for y in range(0, self.total_height - candidate['height'] + 1):
-                            for x in range(0, self.total_width - candidate['width'] + 1):
-                                if self.can_place_module(grid, candidate, x, y):
-                                    # Calculate new bounding box if this module is placed here
-                                    temp_placement = placement + [{
-                                        'x': x, 
-                                        'y': y, 
-                                        'width': candidate['width'], 
-                                        'height': candidate['height']
-                                    }]
-                                    
-                                    min_x = min(mod['x'] for mod in temp_placement)
-                                    min_y = min(mod['y'] for mod in temp_placement)
-                                    max_x = max(mod['x'] + mod['width'] for mod in temp_placement)
-                                    max_y = max(mod['y'] + mod['height'] for mod in temp_placement)
-                                    
-                                    outer_area = (max_x - min_x) * (max_y - min_y)
-                                    
-                                    if outer_area < min_outer_area:
-                                        min_outer_area = outer_area
-                                        best_position = (x, y)
-                
-                # Place the chosen module
-                if best_module_idx is not None and best_position is not None:
-                    module = self.selected_modules[best_module_idx]
-                    x, y = best_position
-                    
-                    grid = self.place_module(grid, module, x, y)
-                    
-                    module_placed = module.copy()
-                    module_placed['x'] = x
-                    module_placed['y'] = y
-                    placement.append(module_placed)
-                    placed_indices.add(best_module_idx)
-                    
-                    print(f"Placed module {module['name']} (ID:{module['id']}) at position ({x},{y})")
-                else:
-                    print("Warning: Could not place all modules!")
-                    break
-            
-            # Calculate final score
-            self.best_placement = placement
-            self.grid = grid
-            self.calculate_placement_score()
-            
-            elapsed_time = time.time() - start_time
-            print(f"Placement completed in {elapsed_time:.2f} seconds")
-            
-            return placement, grid
-        
-        def calculate_placement_score(self):
-            """Calculate the score for the final placement."""
-            if not self.best_placement:
-                return 0
-                
-            # Find min/max coordinates of placed modules
-            min_x = min(mod['x'] for mod in self.best_placement)
-            min_y = min(mod['y'] for mod in self.best_placement)
-            max_x = max(mod['x'] + mod['width'] for mod in self.best_placement)
-            max_y = max(mod['y'] + mod['height'] for mod in self.best_placement)
-            
-            # Calculate bounding box area and used area
-            bbox_area = (max_x - min_x) * (max_y - min_y)
-            used_area = sum(mod['width'] * mod['height'] for mod in self.best_placement)
-            
-            # Density within bounding box (compactness)
-            if bbox_area == 0:
-                compactness = 0
-            else:
-                compactness = used_area / bbox_area
-                
-            # Calculate connectivity score
-            connectivity = self.analyze_resource_connections()
-            connectivity_score = 0
-            total_connections = 0
-            
-            for i, mod_i in enumerate(self.best_placement):
-                for j, mod_j in enumerate(self.best_placement):
-                    if i != j and connectivity[i, j] > 0:
-                        # Calculate distance between centers
-                        center_i_x = mod_i['x'] + mod_i['width'] / 2
-                        center_i_y = mod_i['y'] + mod_i['height'] / 2
-                        center_j_x = mod_j['x'] + mod_j['width'] / 2
-                        center_j_y = mod_j['y'] + mod_j['height'] / 2
-                        
-                        manhattan_dist = abs(center_i_x - center_j_x) + abs(center_i_y - center_j_y)
-                        max_dist = self.total_width + self.total_height
-                        
-                        # Higher connectivity and lower distance = better score
-                        connection_score = connectivity[i, j] * (1 - manhattan_dist / max_dist)
-                        connectivity_score += connection_score
-                        total_connections += connectivity[i, j]
-            
-            # Normalize connectivity score
-            if total_connections > 0:
-                connectivity_score /= total_connections
-                
-            # Final score (weighted average)
-            final_score = 0.6 * compactness + 0.4 * connectivity_score
-            self.best_score = final_score
-            
-            print(f"Final placement score: {final_score:.4f}")
-            print(f"Compactness: {compactness:.4f}")
-            print(f"Connectivity: {connectivity_score:.4f}")
-            
-            return {
-                'total_score': final_score,
-                'compactness': compactness,
-                'connectivity': connectivity_score,
-                'used_area': used_area,
-                'bbox_area': bbox_area,
-                'bbox_width': max_x - min_x,
-                'bbox_height': max_y - min_y
-            }
-        
-        def get_resource_connections(self):
-            """Map the resource flows between modules."""
-            connections = {res: [] for res in INTERNAL_RESOURCES}
-            
-            for resource in INTERNAL_RESOURCES:
-                # Find producers of this resource
-                producers = []
-                for i, mod in enumerate(self.best_placement):
-                    if resource in mod['outputs']:
-                        producers.append((i, mod['outputs'][resource]))
-                
-                # Find consumers of this resource
-                consumers = []
-                for i, mod in enumerate(self.best_placement):
-                    if resource in mod['inputs']:
-                        consumers.append((i, mod['inputs'][resource]))
-                
-                # Create connections between producers and consumers
-                remaining_production = {i: amount for i, amount in producers}
-                remaining_consumption = {i: amount for i, amount in consumers}
-                
-                for p_idx, _ in producers:
-                    for c_idx, _ in consumers:
-                        if p_idx != c_idx and remaining_production.get(p_idx, 0) > 0 and remaining_consumption.get(c_idx, 0) > 0:
-                            flow = min(remaining_production[p_idx], remaining_consumption[c_idx])
-                            connections[resource].append((p_idx, c_idx, flow))
-                            remaining_production[p_idx] -= flow
-                            remaining_consumption[c_idx] -= flow
-            
-            return connections
-        
-        def run_placement(self):
-            """Run the greedy placement and return the results."""
-            return self.enhanced_greedy_placement()
-    
-    # --- 5. Run the placement algorithm ---
-    placement_engine = GreedyModulePlacement(
-        module_data,
-        selected_modules_counts,
-        total_width,
-        total_height
+    # Initialize and run the placement algorithm
+    placement = FastClusteredPlacement(
+        module_data, selected_modules_counts, datacenter_width, datacenter_height
     )
     
-    placement, grid = placement_engine.run_placement()
+    placed_modules, grid = placement.run()
     
-    if not placement:
-        return {
-            'status': 'Failed',
-            'message': 'Placement algorithm failed to place modules',
-            'placement': [],
-            'grid': None,
-            'score': 0.0
-        }
+    # Convert numpy grid to list for JSON serialization
+    grid_list = grid.tolist() if isinstance(grid, np.ndarray) else grid
     
-    # Calculate score details
-    score_details = placement_engine.calculate_placement_score()
-    
-    # Prepare connections data for frontend visualization
-    resource_connections = placement_engine.get_resource_connections()
-    connections_list = []
-    
-    for resource, flows in resource_connections.items():
-        for producer_idx, consumer_idx, flow_amount in flows:
-            if producer_idx < len(placement) and consumer_idx < len(placement):
-                connections_list.append({
-                    'resource': resource,
-                    'producer_id': placement[producer_idx]['id'],
-                    'producer_instance': placement[producer_idx]['instance'],
-                    'consumer_id': placement[consumer_idx]['id'],
-                    'consumer_instance': placement[consumer_idx]['instance'],
-                    'flow_amount': flow_amount
-                })
-    
-    # Prepare result
-    result = {
-        'status': 'Success',
-        'placement': placement,
-        'grid': grid.tolist() if grid is not None else None,
-        'score': score_details,
-        'connections': connections_list,
-        'dimensions': {
-            'width': total_width,
-            'height': total_height
-        }
+    placement_result = {
+        "placed_modules": placed_modules,
+        "grid": grid_list,
+        "width": datacenter_width,
+        "height": datacenter_height,
+        "placement_score": placement.placement_score
     }
     
-    return result
+    print(f"Placement completed in {time.time() - start_time:.2f} seconds")
+    print(f"Successfully placed {len(placed_modules)} modules")
+    print(f"Placement score: {placement.placement_score:.4f}")
+    
+    return placement_result
+
+
+class FastClusteredPlacement:
+    """Optimized solution for clustered module placement with focus on performance."""
+    
+    def __init__(self, module_data, selected_modules, datacenter_width, datacenter_height, locked_regions=None):
+        """
+        Initialize the fast clustered placement engine.
+        
+        Args:
+            module_data: Dictionary with module specifications
+            selected_modules: Dictionary with module_id -> count mapping
+            datacenter_width: Width of the datacenter grid
+            datacenter_height: Height of the datacenter grid
+            locked_regions: Optional boolean mask where True indicates locked cells
+        """
+        self.width = datacenter_width
+        self.height = datacenter_height
+        self.module_data = module_data
+        
+        # Create a spatial grid for fast collision detection
+        self.grid = np.zeros((datacenter_height, datacenter_width), dtype=int)
+        if locked_regions is not None:
+            self.grid[locked_regions] = -1  # Mark locked regions
+        
+        # Process module data
+        self.modules = []
+        self.clusters_by_type = defaultdict(list)
+        
+        # Group modules by type and calculate centroids for faster access
+        for module_id, count in selected_modules.items():
+            if module_id not in module_data:
+                continue
+                
+            module_info = module_data[module_id]
+            
+            # Create module instances
+            for i in range(count):
+                module = {
+                    'id': module_id,
+                    'name': module_info['name'],
+                    'width': module_info['width'],
+                    'height': module_info['height'],
+                    'inputs': module_info['inputs'],
+                    'outputs': module_info['outputs'],
+                    'x': -1,  # Will be set during placement
+                    'y': -1   # Will be set during placement
+                }
+                self.modules.append(module)
+                self.clusters_by_type[module_id].append(module)
+        
+        # Final placement results
+        self.placed_modules = []
+        self.placement_score = 0
+    
+    def run(self):
+        """Run the optimized placement algorithm."""
+        print(f"Starting fast clustered placement for {len(self.modules)} modules of {len(self.clusters_by_type)} types")
+        start_time = time.time()
+        
+        # Process modules in batches by type for better organization
+        placed_count = 0
+        
+        # First, create super-modules (clusters) by combining modules of the same type
+        super_modules = self._create_super_modules()
+        
+        # Sort super modules by area (largest first)
+        super_modules.sort(key=lambda m: m['width'] * m['height'], reverse=True)
+        
+        # Place super modules one by one
+        for super_module in super_modules:
+            if self._place_super_module(super_module):
+                placed_count += len(super_module['modules'])
+            else:
+                # If placement failed, try splitting and placing individually
+                print(f"Failed to place super module with {len(super_module['modules'])} modules of type {super_module['name']}")
+                # Try to place individual modules
+                individual_success = 0
+                for module in super_module['modules']:
+                    if self._place_individual_module(module):
+                        individual_success += 1
+                        placed_count += 1
+                
+                print(f"Placed {individual_success}/{len(super_module['modules'])} modules individually")
+        
+        # Calculate final score
+        self._calculate_score()
+        
+        end_time = time.time()
+        print(f"Placement completed in {end_time - start_time:.2f} seconds")
+        print(f"Successfully placed {placed_count}/{len(self.modules)} modules")
+        print(f"Final placement score: {self.placement_score:.4f}")
+        
+        return self.placed_modules, self.grid
+    
+    def _create_super_modules(self):
+        """
+        Create super modules by combining modules of the same type.
+        Uses an approximation algorithm to create near-square shapes.
+        """
+        super_modules = []
+        
+        for module_type, modules in self.clusters_by_type.items():
+            if not modules:
+                continue
+                
+            # Sample module to get dimensions
+            sample = modules[0]
+            module_width = sample['width']
+            module_height = sample['height']
+            
+            # Calculate how many modules we need to arrange
+            count = len(modules)
+            
+            # Compute grid dimensions for this super module
+            # Try to create a roughly square arrangement
+            aspect_ratio = module_height / module_width if module_width > 0 else 1
+            cols = max(1, int(math.sqrt(count / aspect_ratio)))
+            rows = math.ceil(count / cols)
+            
+            # Ensure we have enough cells
+            while rows * cols < count:
+                cols += 1
+            
+            # Create super module
+            super_module = {
+                'id': f"super_{module_type}",
+                'name': sample['name'],
+                'width': cols * module_width,
+                'height': rows * module_height,
+                'modules': modules,
+                'rows': rows,
+                'cols': cols,
+                'module_width': module_width,
+                'module_height': module_height
+            }
+            
+            super_modules.append(super_module)
+        
+        return super_modules
+    
+    def _place_super_module(self, super_module):
+        """Place a super module (cluster) on the grid."""
+        width = super_module['width']
+        height = super_module['height']
+        
+        # Can't place if it's too big for the datacenter
+        if width > self.width or height > self.height:
+            return False
+        
+        # Check a reduced set of positions for speed
+        # First try corners and center
+        priority_positions = [
+            (0, 0),  # Top-left
+            (0, self.height - height),  # Bottom-left
+            (self.width - width, 0),  # Top-right
+            (self.width - width, self.height - height),  # Bottom-right
+            (self.width//2 - width//2, self.height//2 - height//2)  # Center
+        ]
+        
+        # Filter valid positions
+        priority_positions = [(x, y) for x, y in priority_positions 
+                             if 0 <= x <= self.width - width and 
+                                0 <= y <= self.height - height]
+        
+        # Try priority positions first
+        for x, y in priority_positions:
+            if self._can_place_at(x, y, width, height):
+                return self._commit_super_module_placement(super_module, x, y)
+        
+        # If priority positions don't work, sample grid with larger steps for speed
+        step = max(1, min(width, height) // 3)
+        
+        # Create a list of positions to sample
+        positions = []
+        for y in range(0, self.height - height + 1, step):
+            for x in range(0, self.width - width + 1, step):
+                positions.append((x, y))
+        
+        # Shuffle positions for randomness with fixed seed for reproducibility
+        random.seed(42)
+        random.shuffle(positions)
+        
+        # Only check a reasonable number of positions for speed
+        max_positions = min(200, len(positions))
+        
+        for x, y in positions[:max_positions]:
+            if self._can_place_at(x, y, width, height):
+                return self._commit_super_module_placement(super_module, x, y)
+        
+        # More positions didn't work, try stricter limits for last attempt
+        if max_positions < len(positions):
+            for x, y in positions[max_positions:]:
+                if self._can_place_at(x, y, width, height):
+                    return self._commit_super_module_placement(super_module, x, y)
+        
+        return False
+    
+    def _can_place_at(self, x, y, width, height):
+        """Check if we can place a module at the given position."""
+        # Check bounds
+        if x < 0 or y < 0 or x + width > self.width or y + height > self.height:
+            return False
+        
+        # Check for collision using efficient array operations
+        region = self.grid[y:y+height, x:x+width]
+        return np.all(region == 0)
+    
+    def _commit_super_module_placement(self, super_module, x, y):
+        """Place the super module and its constituent modules."""
+        modules = super_module['modules']
+        rows = super_module['rows']
+        cols = super_module['cols']
+        module_width = super_module['module_width']
+        module_height = super_module['module_height']
+        
+        # Mark the grid as occupied - use the module_id as the grid value
+        try:
+            module_id = int(modules[0]['id'])
+        except (ValueError, TypeError):
+            module_id = 1  # Default if ID can't be converted to int
+        
+        # Place individual modules within the super module grid
+        placed_count = 0
+        for i, module in enumerate(modules):
+            if placed_count >= rows * cols:
+                break
+                
+            # Calculate position within the super module
+            row = i // cols
+            col = i % cols
+            
+            module_x = x + col * module_width
+            module_y = y + row * module_height
+            
+            # Update module position
+            module['x'] = module_x
+            module['y'] = module_y
+            
+            # Mark grid as occupied
+            self.grid[module_y:module_y+module_height, module_x:module_x+module_width] = module_id
+            
+            # Add to placed modules list
+            self.placed_modules.append(module)
+            placed_count += 1
+        
+        return True
+    
+    def _place_individual_module(self, module):
+        """Place a single module as fallback if super module placement fails."""
+        width = module['width']
+        height = module['height']
+        
+        # Sample positions randomly for speed
+        positions = []
+        step = max(1, min(width, height))
+        
+        for y in range(0, self.height - height + 1, step):
+            for x in range(0, self.width - width + 1, step):
+                positions.append((x, y))
+        
+        # Shuffle positions
+        random.shuffle(positions)
+        
+        # Try to place at available positions
+        for x, y in positions:
+            if self._can_place_at(x, y, width, height):
+                # Update module position
+                module['x'] = x
+                module['y'] = y
+                
+                # Mark grid as occupied
+                try:
+                    module_id = int(module['id'])
+                except (ValueError, TypeError):
+                    module_id = 1  # Default if ID can't be converted to int
+                
+                self.grid[y:y+height, x:x+width] = module_id
+                
+                # Add to placed modules list
+                self.placed_modules.append(module)
+                return True
+        
+        return False
+    
+    def _calculate_score(self):
+        """Calculate a score for the placement."""
+        if not self.placed_modules:
+            self.placement_score = 0
+            return
+        
+        # Calculate bounding box
+        min_x = min(m['x'] for m in self.placed_modules)
+        min_y = min(m['y'] for m in self.placed_modules)
+        max_x = max(m['x'] + m['width'] for m in self.placed_modules)
+        max_y = max(m['y'] + m['height'] for m in self.placed_modules)
+        
+        # Calculate metrics
+        bounding_area = (max_x - min_x) * (max_y - min_y)
+        used_area = sum(m['width'] * m['height'] for m in self.placed_modules)
+        
+        # Compactness - higher is better
+        compactness = used_area / bounding_area if bounding_area > 0 else 0
+        
+        # Clustering metric - higher is better
+        clusters = defaultdict(list)
+        for module in self.placed_modules:
+            clusters[module['id']].append(module)
+        
+        clustering_score = 0
+        module_count = len(self.placed_modules)
+        
+        for module_id, cluster_modules in clusters.items():
+            if len(cluster_modules) <= 1:
+                continue
+                
+            # Calculate centroid
+            centroid_x = sum(m['x'] + m['width']/2 for m in cluster_modules) / len(cluster_modules)
+            centroid_y = sum(m['y'] + m['height']/2 for m in cluster_modules) / len(cluster_modules)
+            
+            # Average Manhattan distance to centroid
+            avg_distance = sum(abs(m['x'] + m['width']/2 - centroid_x) + 
+                              abs(m['y'] + m['height']/2 - centroid_y) 
+                              for m in cluster_modules) / len(cluster_modules)
+            
+            # Normalize by grid dimensions
+            max_distance = self.width + self.height
+            normalized_distance = avg_distance / max_distance
+            
+            # Higher score for closer clustering
+            type_score = 1 - normalized_distance
+            
+            # Weight by cluster size
+            clustering_score += type_score * len(cluster_modules) / module_count
+        
+        # Combined score
+        self.placement_score = 0.4 * compactness + 0.6 * clustering_score
+        print(f"Compactness: {compactness:.4f}, Clustering: {clustering_score:.4f}")
