@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 import os
-from solver_utils_placement import solve_module_placement
+from solver_utils_placement import _solve_module_placement
 from models import Module, IOField
 
 # --- Visualization Function ---
@@ -194,7 +194,7 @@ selected_modules_counts = {
 
 # --- 5. Run the Placement Algorithm ---
 print("--- Running Module Placement Test ---")
-placement_result = solve_module_placement(available_modules, specs, weights, selected_modules_counts)
+placement_result = _solve_module_placement(available_modules, specs, weights, selected_modules_counts)
 
 # --- 6. Print Results ---
 print("\n--- Placement Results ---")
@@ -283,7 +283,7 @@ def test_different_scenarios():
         5: 8    # 8 Storage Arrays (medium)
     }
     
-    dense_result = solve_module_placement(available_modules, dense_specs, weights, dense_modules)
+    dense_result = _solve_module_placement(available_modules, dense_specs, weights, dense_modules)
     
     if "error" not in dense_result:
         print(f"Placed {len(dense_result['placed_modules'])} modules")
@@ -307,7 +307,7 @@ def test_different_scenarios():
         5: 3   # 3 Storage Arrays (medium)
     }
     
-    mixed_result = solve_module_placement(available_modules, mixed_specs, weights, mixed_modules)
+    mixed_result = _solve_module_placement(available_modules, mixed_specs, weights, mixed_modules)
     
     if "error" not in mixed_result:
         print(f"Placed {len(mixed_result['placed_modules'])} modules")
@@ -327,7 +327,7 @@ def test_different_scenarios():
         1: 3,  # 3 Power Generators (too large to all fit)
     }
     
-    small_result = solve_module_placement(available_modules, small_specs, weights, small_modules)
+    small_result = _solve_module_placement(available_modules, small_specs, weights, small_modules)
     
     if "error" not in small_result:
         print(f"Placed {len(small_result['placed_modules'])}/{sum(small_modules.values())} modules")
