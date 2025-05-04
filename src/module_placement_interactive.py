@@ -144,7 +144,6 @@ class RegionLocker:
         self.grid = np.zeros((self.total_height, self.total_width), dtype=int)
         print("All locked regions cleared.")
 
-
 class GreedyModulePlacement:
     """Handles the greedy placement of modules on a grid."""
     
@@ -316,9 +315,6 @@ class GreedyModulePlacement:
                 # Calculate connectivity score to already placed modules
                 total_connectivity = sum(connectivity[i, j] for j in placed_indices)
                 
-                # CHANGE: Increase the influence of connectivity by squaring or cubing it
-                total_connectivity = total_connectivity ** 2  # or ** 3 for even more emphasis
-                
                 # If connected, prioritize this module
                 if total_connectivity > 0:
                     # Find best position for this module
@@ -372,7 +368,7 @@ class GreedyModulePlacement:
                                                      abs(candidate_center_y - other_center_y))
                                     
                                     # Weight by connectivity
-                                    weighted_dist = manhattan_dist / (connectivity[i, other_idx] ** 2 + 0.1)  # Square the connectivity
+                                    weighted_dist = manhattan_dist / (connectivity[i, other_idx] + 0.1)
                                     total_dist += weighted_dist
                                 
                                 if total_dist < min_dist:
