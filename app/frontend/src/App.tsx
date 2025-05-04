@@ -4,6 +4,7 @@ import MainPage from './pages/MainPage';
 import OldMainPage from './pages/OldMainPage';
 import AddModulePage from './pages/AddModulePage';
 import ViewModulesPage from './pages/ViewModulesPage';
+import GalleryPage from './pages/GalleryPage';
 
 const darkTheme = createTheme({
   palette: {
@@ -29,6 +30,7 @@ function App() {
             <Button color="inherit" component={Link} to="/old">Old Page</Button>
             <Button color="inherit" component={Link} to="/add">Add Module</Button>
             <Button color="inherit" component={Link} to="/view">View Modules</Button>
+            <Button color="inherit" component={Link} to="/view">Gallery</Button>
           </Toolbar>
         </AppBar>
 
@@ -37,6 +39,7 @@ function App() {
             <Route path="/old" element={<OldMainPage />} />
             <Route path="/add" element={<AddModulePage />} />
             <Route path="/view" element={<ViewModulesPage />} />
+            <Route path="/view" element={<GalleryPage />} />
           </Routes>
       </Router>
     </ThemeProvider>
