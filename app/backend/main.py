@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
+import  json
 # Remove Pydantic import if no longer needed directly here
 # from pydantic import BaseModel # Keep if needed for other things, remove if not
 
@@ -94,14 +95,58 @@ async def solve_dummy():
     return {"modules": positioned}    
 
 
-# POST: solve problem and get list, with given fixed modules (if not provided, the fixed_modules are [] )
 @app.post('/solve-components')
-async def solve_components_with_fixed_modules(specs, weights, fixed_modules: list[Module] = [] ):
+async def solve_components_with_fixed_modules(specs, weights, fixed_modules: list[Module] = []):
+    # Get all modules and convert weights to Python object
     modules = get_modules()
     weights = ast.literal_eval(weights)
-    sol = solve_module_list_with_fixed_modules(modules, specs, weights, fixed_modules)
-    print(sol)
-    return sol
+    
+    # Get solution from solver
+    sol_modules, sol_states = solve_module_list_with_fixed_modules(modules, specs, weights, fixed_modules)
+    print(sol_modules)
+    
+    
+    # Create module lookup dictionary for faster access
+    modules_by_id = {mod['id']: mod for mod in modules}
+    
+    # Generate result list with all module instances
+    result_modules = []
+    
+    # For each module ID in the solution
+    for module_id, quantity in sol_modules.items():
+        module_id = int(module_id) if isinstance(module_id, str) else module_id
+        
+        if module_id not in modules_by_id:
+            print(f"Warning: Module ID {module_id} not found in database")
+            continue
+            
+        # Get the module data
+        module = modules_by_id[module_id]
+        
+        # Get width and height from io_fields
+        width = next((io['amount'] for io in module['io_fields'] if io['unit'] == 'Space_X'), 1)
+        height = next((io['amount'] for io in module['io_fields'] if io['unit'] == 'Space_Y'), 1)
+        
+        # Create the specified number of copies
+        for i in range(quantity):
+            result_modules.append({
+                "id": module_id,
+                "name": module['name'],
+                "width": width,
+                "height": height,
+                "instanceId": f"{module_id}_{i}",  # Create unique instance ID
+                "gridColumn": 1,  # Default position
+                "gridRow": 1,     # Default position
+                "io_fields": module['io_fields']
+            })
+    
+    # Return properly formatted result
+    return {"modules": result_modules,
+            "raw_solution":{
+                "modules": sol_modules,
+                "states": sol_states,
+                "specs": json.loads(specs),
+            }}
 
 
 # POST: solve problem for the placements of the modules of module_list, possibly with fixed_modules

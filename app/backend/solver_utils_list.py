@@ -3,6 +3,7 @@ import pulp
 import time
 import math # For checking NaN
 import ast  # Add this at the top of the file with other imports
+import json
 
 
 # --- Constants ---
@@ -125,8 +126,9 @@ def _solve_module_list(modules: list[Module], specs: list[dict], weights: dict, 
     minimize_area = False
     spec_total_width = None
     spec_total_height = None
-    specs = ast.literal_eval(specs)
-    print(specs)
+    specs = json.loads(specs)
+    # specs = ast.literal_eval(specs)
+    # print(specs)
     for rule in specs:
         unit = standardize_unit_name(rule.get('Unit'))
         if not unit:

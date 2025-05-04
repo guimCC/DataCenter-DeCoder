@@ -648,71 +648,80 @@ const MainPage = () => {
       });
     }, [CELL_SIZE]);
 
+    const refineDesign = useCallback(() => {
+      // Use the stored raw solution
+      const refinementData = {
+        initial_solution: rawSolution,
+        modifications: {
+          // Any modifications made by the user
+        }
+      };
+      
     // Handler for the "Design" Button
     const handleDesign = useCallback(() => {
       console.log("Handling Design button click...");
       
-      // Convert active constraints to backend format
+      // Create complete format specs from constraints
       const specs = activeConstraints.map(c => {
-        let specRule = {};
-        
-        switch (c.operation) {
-          case 'Minimize':
-            specRule = { Minimize: parseFloat(c.value) };
-            break;
-          case 'Maximize':
-            specRule = { Maximize: parseFloat(c.value) };
-            break;
-          case 'Below Value':
-            specRule = { Below_Amount: parseFloat(c.value) };
-            break;
-          case 'Above Value':
-            specRule = { Above_Amount: parseFloat(c.value) };
-            break;
-          default:
-            specRule = { Unconstrained: 0 };
-        }
-        
+        const unit = RESOURCE_UNIT_MAP[c.resource] || c.resource;
         return {
-          ...specRule,
-          Unit: RESOURCE_UNIT_MAP[c.resource] || c.resource
+          Unit: unit,
+          Below_Amount: c.operation === 'Below Value' ? 1 : 0,
+          Above_Amount: c.operation === 'Above Value' ? 1 : 0,
+          Minimize: c.operation === 'Minimize' ? 1 : 0,
+          Maximize: c.operation === 'Maximize' ? 1 : 0,
+          Unconstrained: !['Below Value', 'Above Value', 'Minimize', 'Maximize'].includes(c.operation) ? 1 : 0,
+          Amount: c.operation === 'Below Value' || c.operation === 'Above Value' ? parseFloat(c.value) : null
         };
       });
-
-
-      // Add spatial constraints from the max values
+      
+      // Add constraints from form fields
       const maxSpaceX = parseFloat(constraints.maxSpaceX);
       const maxSpaceY = parseFloat(constraints.maxSpaceY);
       const maxPrice = parseFloat(constraints.maxPrice);
       
-      // Only add constraints if values are valid numbers
       if (!isNaN(maxSpaceX) && maxSpaceX > 0) {
         specs.push({
-          Below_Amount: maxSpaceX,
-          Unit: 'Space_X'
+          Unit: 'Space_X',
+          Below_Amount: 1,
+          Above_Amount: 0,
+          Minimize: 0,
+          Maximize: 0,
+          Unconstrained: 0,
+          Amount: maxSpaceX
         });
       }
       
       if (!isNaN(maxSpaceY) && maxSpaceY > 0) {
         specs.push({
-          Below_Amount: maxSpaceY,
-          Unit: 'Space_Y'
+          Unit: 'Space_Y',
+          Below_Amount: 1,
+          Above_Amount: 0,
+          Minimize: 0,
+          Maximize: 0,
+          Unconstrained: 0,
+          Amount: maxSpaceY
         });
       }
       
       if (!isNaN(maxPrice) && maxPrice > 0) {
         specs.push({
-          Below_Amount: maxPrice,
-          Unit: 'Price'
+          Unit: 'Price',
+          Below_Amount: 1,
+          Above_Amount: 0,
+          Minimize: 0,
+          Maximize: 0,
+          Unconstrained: 0,
+          Amount: maxPrice
         });
       }
     
-      // Create weights object from active constraints
+      // Create weights from active constraints
       const weights = {};
       activeConstraints.forEach(c => {
         if (c.operation === 'Minimize' || c.operation === 'Maximize') {
           const unit = RESOURCE_UNIT_MAP[c.resource] || c.resource;
-          weights[unit] = c.operation === 'Minimize' ? -parseFloat(c.value) : parseFloat(c.value);
+          weights[unit] = c.operation === 'Minimize' ? -parseFloat(c.value || '1') : parseFloat(c.value || '1');
         }
       });
     
@@ -731,16 +740,23 @@ const MainPage = () => {
       
       setIsLoading(true);
       
+      // Convert the specs and weights to JSON strings
+      const specsJsonString = JSON.stringify(specs);
+      const weightsJsonString = JSON.stringify(weights);
+      
       // Build query string for specs and weights
       const queryParams = new URLSearchParams();
-      queryParams.append('specs', JSON.stringify(specs));
-      queryParams.append('weights', JSON.stringify(weights));
+      queryParams.append('specs', specsJsonString);
+      queryParams.append('weights', weightsJsonString);
       
-      // Make the API request - specs and weights as query params, fixed_modules as body
+      console.log("Sending specs:", specs);
+      console.log("Sending weights:", weights);
+      
+      // Make the API request
       fetch(`http://localhost:8000/solve-components?${queryParams.toString()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fixedModules) // Send only the fixed modules list in the body
+        body: JSON.stringify(fixedModules)
       })
       .then(res => {
         if (!res.ok) {
@@ -752,24 +768,91 @@ const MainPage = () => {
       })
       .then((data) => {
         if (data && data.modules) {
-          // Process the returned modules
-          const processedModules: PositionedModule[] = data.modules
-            .map((m: any, index: number) => ({
-              id: m.id,
-              name: m.name,
-              instanceId: generateUniqueId(`design_${m.id}_${index}`),
-              gridColumn: Number(m.gridColumn || 1),
-              gridRow: Number(m.gridRow || 1),
-              width: Number(m.width || 1),
-              height: Number(m.height || 1),
-              io_fields: m.io_fields || []
-            }));
+          if (data.raw_solution) {
+            setRawSolution(data.raw_solution);
+          }
+          // Get grid dimensions
+          const gridWidth = parseInt(constraints.maxSpaceX) || DEFAULT_GRID_DIMENSIONS.cols;
+          const gridHeight = parseInt(constraints.maxSpaceY) || DEFAULT_GRID_DIMENSIONS.rows;
+          const spacing = 2; // Gap between modules in cells
+          
+          // Group modules by type for better organization
+          const modulesByType: {[key: string]: any[]} = {};
+          data.modules.forEach((m: any) => {
+            const type = m.name?.toLowerCase() || 'unknown';
+            const key = getModuleType(type);
+            if (!modulesByType[key]) modulesByType[key] = [];
+            modulesByType[key].push(m);
+          });
+          
+          // Position trackers for each edge of the grid
+          let topX = 0; // Left to right along top edge
+          let rightY = 0; // Top to bottom along right edge
+          let bottomX = gridWidth; // Right to left along bottom edge
+          let leftY = gridHeight; // Bottom to top along left edge
+          
+          const processedModules: PositionedModule[] = [];
+          
+          // Place modules by type around the grid
+          Object.entries(modulesByType).forEach(([type, modules], typeIndex) => {
+            // Decide which edge to place this module type on
+            const edge = typeIndex % 4;
             
+            modules.forEach((m: any, moduleIndex: number) => {
+              const width = Number(m.width || 1);
+              const height = Number(m.height || 1);
+              let gridCol: number;
+              let gridRow: number;
+              
+              switch(edge) {
+                case 0: // Top edge (above grid)
+                  gridCol = topX + 1;
+                  gridRow = 0 - height - 1;
+                  topX += width + spacing;
+                  break;
+                  
+                case 1: // Right edge
+                  gridCol = gridWidth + 2;
+                  gridRow = rightY + 1;
+                  rightY += height + spacing;
+                  break;
+                  
+                case 2: // Bottom edge
+                  gridCol = bottomX - width + 1;
+                  gridRow = gridHeight + 2;
+                  bottomX -= width + spacing;
+                  break;
+                  
+                case 3: // Left edge
+                  gridCol = 0 - width - 1;
+                  gridRow = leftY - height + 1;
+                  leftY -= height + spacing;
+                  break;
+              }
+              
+              processedModules.push({
+                id: m.id,
+                name: m.name,
+                instanceId: generateUniqueId(`design_${m.id}_${moduleIndex}`),
+                gridColumn: gridCol,
+                gridRow: gridRow,
+                width: width,
+                height: height,
+                io_fields: m.io_fields || []
+              });
+            });
+          });
+          
           setResultModules(processedModules);
           
-          // Create React Flow nodes from the modules
+          // Create React Flow nodes from the processed modules
           const newNodes = createNodesFromModules(processedModules);
           setNodes(newNodes);
+          
+          // Add timeout to fit view after modules are placed
+          setTimeout(() => {
+            reactFlowInstance.fitView({ padding: 0.2 });
+          }, 100);
         } else {
           console.error("Invalid response from solver:", data);
           alert("The solver returned an invalid response. Check the console for details.");
