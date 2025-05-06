@@ -19,6 +19,8 @@ DataCenter-DeCoder is an interactive tool for designing and optimizing data cent
 
 ## 🏛️ Architecture
 
+![](images/architecture.jpeg)
+
 - **Frontend**: React + TypeScript + Vite
 - **Backend**: Python with FastAPI
 - **Data Storage**: MongoDB for module and constraint data
@@ -114,8 +116,9 @@ A team of 4 students with backgrounds in Data Science, AI, and Mathematics, expe
 
 ## 📸 Screenshots
 
-![Server Square Datacenter](https://raw.githubusercontent.com/username/DataCenter-DeCoder/main/docs/server_square.png)
-![Interactive Design Interface](https://raw.githubusercontent.com/username/DataCenter-DeCoder/main/docs/interface.png)
+![](images/main_page.png)
+![](images/Server_Square_fast_clustered.png)
+
 
 ## 📄 License
 
